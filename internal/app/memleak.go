@@ -1,7 +1,253 @@
 package app
 
-import "fmt"
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
-func ShowMemleak() {
-	fmt.Println("ShowMemleak")
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
+	"github.com/cilium/ebpf/rlimit"
+)
+
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/mem.c -- -I/usr/include/bpf -I.
+
+const (
+	EventMalloc        = 0
+	EventFree          = 1
+	EventMemcpy        = 2
+	EventMemset        = 3
+	EventMallocManaged = 4
+)
+
+// CudaAllocEvent matches the C struct (packed)
+type CudaAllocEvent struct {
+	Pid       uint32
+	Tid       uint32
+	Timestamp uint64
+	Size      uint64
+	DevicePtr uint64
+	Comm      [16]byte
+	Type      uint32
+}
+
+type Stats struct {
+	TotalAllocs     int64
+	TotalFrees      int64
+	TotalMemcpys    int64
+	TotalAllocMem   uint64
+	TotalFreeMem    uint64
+	TotalManagedMem uint64
+	ManagedAllocCnt int64
+}
+
+func RunMemleakTrace() {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("Failed to remove memlock limit: %v", err)
+	}
+
+	// Find CUDA library
+	cudaLib := findCudaLibrary()
+	if cudaLib == "" {
+		log.Fatal("CUDA library not found. Please ensure CUDA is installed.")
+	}
+
+	fmt.Printf("Tracing CUDA library: %s\n", cudaLib)
+
+	// Load pre-compiled eBPF objects
+	objs := bpfObjects{}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		var ve *ebpf.VerifierError
+		if errors.As(err, &ve) {
+			log.Fatalf("Verifier error: %+v\n", ve)
+		}
+		log.Fatalf("Failed to load eBPF objects: %v", err)
+	}
+	defer objs.Close()
+
+	fmt.Println("eBPF objects loaded successfully")
+
+	// Attach uprobes
+	links := attachProbes(cudaLib, &objs)
+	defer func() {
+		for _, l := range links {
+			l.Close()
+		}
+	}()
+
+	// Open ring buffer reader
+	rd, err := ringbuf.NewReader(objs.CudaEvents)
+	if err != nil {
+		log.Fatalf("Failed to create ring buffer reader: %v", err)
+	}
+	defer rd.Close()
+
+	// Handle signals
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	fmt.Println("Tracing CUDA memory operations... Press Ctrl+C to stop.")
+	fmt.Println(strings.Repeat("=", 80))
+
+	stats := &Stats{}
+
+	// Read events from ring buffer
+	go func() {
+		for {
+			record, err := rd.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					return
+				}
+				log.Printf("Error reading from ring buffer: %v", err)
+				continue
+			}
+
+			handleEvent(record.RawSample, stats)
+		}
+	}()
+
+	<-ctx.Done()
+	fmt.Println("\nStopping tracer...")
+
+	// Print statistics
+	printStats(stats)
+}
+
+func findCudaLibrary() string {
+	locations := []string{
+		"/usr/lib/x86_64-linux-gnu/libcudart.so",
+		"/usr/local/cuda/lib64/libcudart.so",
+		"/usr/lib64/libcudart.so",
+		"/lib/x86_64-linux-gnu/libcudart.so",
+		"/usr/lib/libcudart.so",
+	}
+
+	for _, loc := range locations {
+		if _, err := os.Stat(loc); err == nil {
+			return loc
+		}
+	}
+
+	return ""
+}
+
+func attachProbes(cudaLib string, objs *bpfObjects) []link.Link {
+	var links []link.Link
+
+	// Helper function to attach uprobe
+	attach := func(symbol string, prog *ebpf.Program) {
+		ex, err := link.OpenExecutable(cudaLib)
+		if err != nil {
+			log.Fatalf("Failed to open executable %s: %v", cudaLib, err)
+		}
+
+		l, err := ex.Uprobe(symbol, prog, nil)
+		if err != nil {
+			log.Printf("Warning: Failed to attach uprobe to %s: %v", symbol, err)
+			return
+		}
+		links = append(links, l)
+		fmt.Printf("✓ Attached uprobe to %s\n", symbol)
+	}
+
+	// Helper function to attach uretprobe
+	attachRet := func(symbol string, prog *ebpf.Program) {
+		ex, err := link.OpenExecutable(cudaLib)
+		if err != nil {
+			log.Fatalf("Failed to open executable %s: %v", cudaLib, err)
+		}
+
+		l, err := ex.Uretprobe(symbol, prog, nil)
+		if err != nil {
+			log.Printf("Warning: Failed to attach uretprobe to %s: %v", symbol, err)
+			return
+		}
+		links = append(links, l)
+		fmt.Printf("✓ Attached uretprobe to %s\n", symbol)
+	}
+
+	// Attach all probes
+	attach("cudaMalloc", objs.TraceCudaMallocEntry)
+	attachRet("cudaMalloc", objs.TraceCudaMallocReturn)
+	attach("cudaFree", objs.TraceCudaFree)
+	attach("cudaMallocManaged", objs.TraceCudaMallocManagedEntry)
+	attachRet("cudaMallocManaged", objs.TraceCudaMallocManagedReturn)
+	attach("cudaMemset", objs.TraceCudaMemset)
+
+	return links
+}
+
+func handleEvent(data []byte, stats *Stats) {
+	// Try as alloc event
+	var event CudaAllocEvent
+	if err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event); err != nil {
+		log.Printf("Failed to parse event: %v", err)
+		return
+	}
+
+	handleAllocEvent(&event, stats)
+}
+
+func handleAllocEvent(event *CudaAllocEvent, stats *Stats) {
+	comm := strings.TrimRight(string(event.Comm[:]), "\x00")
+	timestamp := time.Unix(0, int64(event.Timestamp))
+
+	switch event.Type {
+	case EventMalloc:
+		stats.TotalAllocs++
+		stats.TotalAllocMem += event.Size
+		fmt.Printf("[%s] PID=%d TID=%d ALLOC %s size=%d bytes (%.2f MB)\n",
+			timestamp.Format("15:04:05.000000"),
+			event.Pid, event.Tid, comm,
+			event.Size, float64(event.Size)/(1024*1024))
+
+	case EventMallocManaged:
+		stats.TotalAllocs++
+		stats.ManagedAllocCnt++
+		stats.TotalAllocMem += event.Size
+		stats.TotalManagedMem += event.Size
+		fmt.Printf("[%s] PID=%d TID=%d ALLOC_MANAGED %s size=%d bytes (%.2f MB)\n",
+			timestamp.Format("15:04:05.000000"),
+			event.Pid, event.Tid, comm,
+			event.Size, float64(event.Size)/(1024*1024))
+
+	case EventFree:
+		stats.TotalFrees++
+		stats.TotalFreeMem += event.Size
+		fmt.Printf("[%s] PID=%d TID=%d FREE %s ptr=0x%x size=%d bytes\n",
+			timestamp.Format("15:04:05.000000"),
+			event.Pid, event.Tid, comm,
+			event.DevicePtr, event.Size)
+
+	case EventMemset:
+		fmt.Printf("[%s] PID=%d TID=%d MEMSET %s ptr=0x%x count=%d bytes\n",
+			timestamp.Format("15:04:05.000000"),
+			event.Pid, event.Tid, comm,
+			event.DevicePtr, event.Size)
+	}
+}
+
+func printStats(stats *Stats) {
+	fmt.Println("\n" + strings.Repeat("=", 80))
+	fmt.Println("CUDA Memory Operation Statistics")
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Printf("Total Allocations:       %d (%.2f MB)\n",
+		stats.TotalAllocs, float64(stats.TotalAllocMem)/(1024*1024))
+	fmt.Printf("  - Managed Memory:      %d (%.2f MB)\n",
+		stats.ManagedAllocCnt, float64(stats.TotalManagedMem)/(1024*1024))
+	fmt.Printf("Total Frees:             %d (%.2f MB)\n",
+		stats.TotalFrees, float64(stats.TotalFreeMem)/(1024*1024))
+	fmt.Printf("Net Memory (allocated):  %.2f MB\n",
+		float64(stats.TotalAllocMem-stats.TotalFreeMem)/(1024*1024))
+	fmt.Println(strings.Repeat("=", 80))
 }

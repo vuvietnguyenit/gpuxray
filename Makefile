@@ -4,19 +4,19 @@
 GO := go
 NVCC := nvcc
 CLANG := clang
-BINARY := cuda_tracer
-TEST_CUDA := test_cuda
+BINARY := gpuxray
 ARCH := $(shell uname -m)
 
 # eBPF related
 BPF_SOURCE := cuda_trace.c
 VMLINUX_H := vmlinux.h
-EBPF_PROG_FOLDER := internal/ebpf
+EBPF_PROG_FOLDER := ./internal/ebpf
+APP_FOLDER := ./internal/app
 VMLINUX_BTF := /sys/kernel/btf/vmlinux
 
 all: vmlinux generate build
 
-# Generate vmlinux.h from BTF
+# Generate vmlinux.h from BTF as skeleton for CO-RE
 vmlinux:
 	@echo "Generating vmlinux.h from BTF..."
 	@if [ ! -f $(VMLINUX_BTF) ]; then \
@@ -37,26 +37,16 @@ generate: vmlinux
 	$(GO) generate ./...
 	@echo "✓ Generated eBPF bindings"
 
-# Build the tracer
+# Build the binary
 build: generate
 	@echo "Building CUDA tracer..."
 	$(GO) build -o $(BINARY) .
 	@echo "✓ Build complete: $(BINARY)"
 
 
-# Build test CUDA program
-test_cuda: test_cuda.cu
-	@echo "Building test CUDA program..."
-	@if ! command -v $(NVCC) > /dev/null; then \
-		echo "Error: nvcc not found. Please install CUDA toolkit."; \
-		exit 1; \
-	fi
-	$(NVCC) -o $(TEST_CUDA) test_cuda.cu
-	@echo "✓ Test program built: $(TEST_CUDA)"
-
 # Run the tracer (requires root)
 run: build
-	@echo "Running CUDA tracer (requires root)..."
+	@echo "Running (requires root)..."
 	@if [ "$$(id -u)" != "0" ]; then \
 		echo "Error: This program must be run as root"; \
 		echo "Try: sudo make run"; \
@@ -64,31 +54,13 @@ run: build
 	fi
 	./$(BINARY)
 
-# Run tracer with test program
-test: build test_cuda
-	@echo "Starting tracer with test program..."
-	@if [ "$$(id -u)" != "0" ]; then \
-		echo "Error: This program must be run as root"; \
-		echo "Try: sudo make test"; \
-		exit 1; \
-	fi
-	@echo "Starting tracer in background..."
-	@./$(BINARY) & \
-	TRACER_PID=$$!; \
-	sleep 2; \
-	echo "Running test CUDA program..."; \
-	./$(TEST_CUDA); \
-	sleep 2; \
-	echo "Stopping tracer..."; \
-	kill -INT $$TRACER_PID; \
-	wait $$TRACER_PID 2>/dev/null || true
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -f $(BINARY) $(TEST_CUDA)
-	rm -f bpf_bpfe*.go bpf_bpfe*.o
-	rm -f $(VMLINUX_H)
+	rm -f $(BINARY)
+	rm -f $(APP_FOLDER)/bpf_*_bpfel.go $(APP_FOLDER)/bpf_*_bpfel.o
+	rm -f $(EBPF_PROG_FOLDER)/$(VMLINUX_H)
 	$(GO) clean
 	@echo "✓ Clean complete"
 
@@ -135,7 +107,7 @@ install-deps-arch:
 		make
 	@echo "✓ System dependencies installed"
 
-# Check system requirements
+# Check system requirements for building and running
 check:
 	@echo "Checking system requirements..."
 	@echo ""
@@ -168,31 +140,16 @@ check:
 	fi
 	@echo ""
 
-# Verify eBPF program
-verify: generate
-	@echo "Verifying eBPF program..."
-	@if [ -f bpf_bpfel.o ]; then \
-		llvm-objdump -S bpf_bpfel.o; \
-		echo ""; \
-		echo "✓ eBPF object file generated successfully"; \
-	else \
-		echo "❌ eBPF object file not found"; \
-		exit 1; \
-	fi
 
 help:
 	@echo "CUDA Memory Tracer (BTF/CO-RE) - Makefile targets:"
 	@echo ""
 	@echo "  make all                  - Generate vmlinux.h, build everything"
-	@echo "  make vmlinux              - Generate vmlinux.h from BTF"
+	@echo "  make vmlinux              - Generate vmlinux.h from BTF for CO-RE"
 	@echo "  make generate             - Generate eBPF Go bindings"
-	@echo "  make deps                 - Install Go dependencies"
 	@echo "  make build                - Build the tracer"
-	@echo "  make test_cuda            - Build test CUDA program"
 	@echo "  make run                  - Run the tracer (requires root)"
-	@echo "  make test                 - Run tracer with test program"
 	@echo "  make clean                - Clean build artifacts"
-	@echo "  make verify               - Verify eBPF program compilation"
 	@echo "  make check                - Check system requirements"
 	@echo ""
 	@echo "  make install-deps-ubuntu  - Install system deps (Ubuntu/Debian)"
@@ -201,7 +158,7 @@ help:
 	@echo ""
 	@echo "  make help                 - Show this help message"
 	@echo ""
-	@echo "Requirements:"
+	@echo "Requirements for building and running:"
 	@echo "  - Linux kernel 5.8+ with BTF support"
 	@echo "  - clang/LLVM 10+"
 	@echo "  - libbpf-dev"

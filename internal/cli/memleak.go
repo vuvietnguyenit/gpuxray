@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/vuvietnguyenit/gpuxray/internal/app"
 )
@@ -11,8 +9,7 @@ var memleakCmd = &cobra.Command{
 	Use:   "memleak",
 	Short: "Memory-leaked tracing",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("run memleak")
-		app.ShowMemleak()
+		app.RunMemleakTrace()
 		return nil
 	},
 }
