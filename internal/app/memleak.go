@@ -123,24 +123,6 @@ func RunMemleakTrace() {
 	printStats(stats)
 }
 
-func findCudaLibrary() string {
-	locations := []string{
-		"/usr/lib/x86_64-linux-gnu/libcudart.so",
-		"/usr/local/cuda/lib64/libcudart.so",
-		"/usr/lib64/libcudart.so",
-		"/lib/x86_64-linux-gnu/libcudart.so",
-		"/usr/lib/libcudart.so",
-	}
-
-	for _, loc := range locations {
-		if _, err := os.Stat(loc); err == nil {
-			return loc
-		}
-	}
-
-	return ""
-}
-
 func attachProbes(cudaLib string, objs *bpfObjects) []link.Link {
 	var links []link.Link
 
