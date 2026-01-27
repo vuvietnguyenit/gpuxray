@@ -62,6 +62,7 @@ func RunMemleakTrace() {
 	}
 
 	fmt.Printf("Tracing CUDA library: %s\n", cudaLib)
+	GetRunningProcesses()
 
 	// Load pre-compiled eBPF objects
 	objs := bpfObjects{}
