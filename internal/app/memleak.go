@@ -1,3 +1,7 @@
+// This module is help to work with memory management of GPU through CUDA APIs
+// SPDX-License-Identifier: Apache-2.0
+//
+// Copyright 2026 Vu Nguyen
 package app
 
 import (
@@ -16,7 +20,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-	"github.com/cilium/ebpf/rlimit"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/mem.c -- -I/usr/include/bpf -I.
@@ -51,38 +55,19 @@ type Stats struct {
 }
 
 func RunMemleakTrace() {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Failed to remove memlock limit: %v", err)
-	}
-	// Find CUDA library
-	cudaLib := findCudaLibrary()
-	if cudaLib == "" {
-		log.Fatal("CUDA library not found. Please ensure CUDA is installed.")
-	}
-
-	fmt.Printf("Tracing CUDA library: %s\n", cudaLib)
 	procs, err := getRunningProcesses()
 	if err != nil {
 		log.Printf("Failed to get running processes: %v", err)
 	}
-	// Load pre-compiled eBPF objects
-	objs := bpfObjects{}
-	if err := loadBpfObjects(&objs, nil); err != nil {
-		var ve *ebpf.VerifierError
-		if errors.As(err, &ve) {
-			log.Fatalf("Verifier error: %+v\n", ve)
-		}
-		log.Fatalf("Failed to load eBPF objects: %v", err)
-	}
-	defer objs.Close()
-	sharedObjectPaths := procs.getMapLinked(procs)
-	fmt.Printf("Found %d processes using CUDA libraries.\n", sharedObjectPaths.Size())
-
-	for el := sharedObjectPaths.Iterator(); el.Next(); {
+	soPath := procs.getMapLinked(procs)
+	apis := procs.enumerateExportedAPINames("*")
+	syscalls, _ := internal.FilterTreeSetRegex(apis, "cuMemAlloc*")
+	fmt.Printf("Enumerated %d CUDA APIs from running processes.\n", syscalls)
+	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
 		// Attach uprobes by shared object paths
-		links := attachProbes(libPath, &objs)
+		links := attachProbes(libPath, &bpfObjecs)
 		defer func() {
 			for _, l := range links {
 				l.Close()
@@ -102,7 +87,7 @@ func RunMemleakTrace() {
 	fmt.Println("eBPF objects loaded successfully")
 
 	// Open ring buffer reader
-	rd, err := ringbuf.NewReader(objs.CudaEvents)
+	rd, err := ringbuf.NewReader(bpfObjecs.CudaEvents)
 	if err != nil {
 		log.Fatalf("Failed to create ring buffer reader: %v", err)
 	}
@@ -176,11 +161,11 @@ func attachProbes(cudaLib string, objs *bpfObjects) []link.Link {
 	}
 
 	// Attach all probes
-	attach("cuMemAlloc", objs.TraceCudaMallocEntry)
-	attachRet("cuMemAlloc", objs.TraceCudaMallocReturn)
-	attach("cuMemFree", objs.TraceCudaFree)
-	attach("cuMemAllocManaged", objs.TraceCudaMallocManagedEntry)
-	attachRet("cuMemAllocManaged", objs.TraceCudaMallocManagedReturn)
+	attach("cuMemAlloc_v2", objs.TraceCudaMallocEntry)
+	attachRet("cuMemAlloc_v2", objs.TraceCudaMallocReturn)
+	attach("cuMemFree_v2", objs.TraceCudaFree)
+	attach("cuMemAllocManaged_v2", objs.TraceCudaMallocManagedEntry)
+	attachRet("cuMemAllocManaged_v2", objs.TraceCudaMallocManagedReturn)
 
 	return links
 }

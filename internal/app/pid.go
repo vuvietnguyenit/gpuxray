@@ -1,9 +1,11 @@
-/*
-This module is created to operate on processes are runnning GPU.
-*/
+// This module is created to operate on processes are runnning GPU.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Copyright 2026 Vu Nguyen
 package app
 
 import (
+	"debug/elf"
 	"fmt"
 	"log"
 	"strings"
@@ -130,4 +132,52 @@ func (lp ListProcess) getMapLinked(procs []ProcessInfo) *treeset.Set {
 		}
 	}
 	return sharedObjectPaths
+}
+
+// Function to enumerate exported APIs from a process's CUDA shared libraries, can provide a prefix
+// to enumerate specific APIs related to what CUDA function we want to inspect to.
+// For example, prefix = "cuMem" will enumerate all APIs related to Memory Management of CUDA Driver API
+// prefix = "cudaMalloc" will enumerate all APIs related to Memory Management of CUDA Runtime API
+// prefix = * will enumerate all exported APIs from the CUDA shared libraries
+
+func (p ProcessInfo) enumerateExportedAPIs(prefix string) ([]elf.Symbol, error) {
+	var result []elf.Symbol
+	for _, path := range p.CUDALibs {
+		syms, err := elf.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer syms.Close()
+
+		symsList, err := syms.DynamicSymbols()
+		if err != nil {
+			return nil, err
+		}
+		if prefix != "*" {
+			var filtered []elf.Symbol
+			for _, sym := range symsList {
+				if strings.HasPrefix(sym.Name, prefix) {
+					filtered = append(filtered, sym)
+				}
+			}
+			result = append(result, filtered...)
+		} else {
+			result = append(result, symsList...)
+		}
+	}
+	return result, nil
+}
+
+func (lp ListProcess) enumerateExportedAPINames(prefix string) *treeset.Set {
+	result := treeset.NewWithStringComparator()
+	for _, proc := range lp {
+		syms, err := proc.enumerateExportedAPIs(prefix)
+		if err != nil {
+			continue
+		}
+		for _, sym := range syms {
+			result.Add(sym.Name)
+		}
+	}
+	return result
 }
