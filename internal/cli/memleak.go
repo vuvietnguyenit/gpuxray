@@ -2,6 +2,7 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/app"
 )
 
@@ -14,14 +15,8 @@ var memleakCmd = &cobra.Command{
 	},
 }
 
-type MemleakFlags struct {
-	Pid int
-}
-
-var MemoryleakFlags MemleakFlags
-
 func init() {
 	rootCmd.AddCommand(memleakCmd)
 	// Define a local flag for the 'serve' command.
-	memleakCmd.Flags().IntVarP(&MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
+	memleakCmd.Flags().IntVarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
 }

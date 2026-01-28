@@ -54,7 +54,6 @@ func RunMemleakTrace() {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("Failed to remove memlock limit: %v", err)
 	}
-
 	// Find CUDA library
 	cudaLib := findCudaLibrary()
 	if cudaLib == "" {
@@ -62,8 +61,10 @@ func RunMemleakTrace() {
 	}
 
 	fmt.Printf("Tracing CUDA library: %s\n", cudaLib)
-	GetRunningProcesses()
-
+	procs, err := getRunningProcesses()
+	if err != nil {
+		log.Printf("Failed to get running processes: %v", err)
+	}
 	// Load pre-compiled eBPF objects
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -74,16 +75,31 @@ func RunMemleakTrace() {
 		log.Fatalf("Failed to load eBPF objects: %v", err)
 	}
 	defer objs.Close()
+	sharedObjectPaths := procs.getMapLinked(procs)
+	fmt.Printf("Found %d processes using CUDA libraries.\n", sharedObjectPaths.Size())
+
+	for el := sharedObjectPaths.Iterator(); el.Next(); {
+		libPath := el.Value().(string)
+		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
+		// Attach uprobes by shared object paths
+		links := attachProbes(libPath, &objs)
+		defer func() {
+			for _, l := range links {
+				l.Close()
+			}
+		}()
+	}
+
+	// if internal.MemoryleakFlags.Pid != 0 {
+	// 	pid := internal.MemoryleakFlags.Pid
+	// 	proc := procs.findProcessInfoByPID(int(pid))
+	// 	if proc == nil {
+	// 		log.Fatalf("PID %d is not using CUDA or does not exist.", pid)
+	// 	}
+	// 	fmt.Printf("Tracing memory leaks for PID %d (%s)\n", pid, proc.Comm)
+	// }
 
 	fmt.Println("eBPF objects loaded successfully")
-
-	// Attach uprobes
-	links := attachProbes(cudaLib, &objs)
-	defer func() {
-		for _, l := range links {
-			l.Close()
-		}
-	}()
 
 	// Open ring buffer reader
 	rd, err := ringbuf.NewReader(objs.CudaEvents)
@@ -160,12 +176,11 @@ func attachProbes(cudaLib string, objs *bpfObjects) []link.Link {
 	}
 
 	// Attach all probes
-	attach("cudaMalloc", objs.TraceCudaMallocEntry)
-	attachRet("cudaMalloc", objs.TraceCudaMallocReturn)
-	attach("cudaFree", objs.TraceCudaFree)
-	attach("cudaMallocManaged", objs.TraceCudaMallocManagedEntry)
-	attachRet("cudaMallocManaged", objs.TraceCudaMallocManagedReturn)
-	attach("cudaMemset", objs.TraceCudaMemset)
+	attach("cuMemAlloc", objs.TraceCudaMallocEntry)
+	attachRet("cuMemAlloc", objs.TraceCudaMallocReturn)
+	attach("cuMemFree", objs.TraceCudaFree)
+	attach("cuMemAllocManaged", objs.TraceCudaMallocManagedEntry)
+	attachRet("cuMemAllocManaged", objs.TraceCudaMallocManagedReturn)
 
 	return links
 }

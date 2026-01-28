@@ -65,7 +65,7 @@ populate_event_common(struct cuda_alloc_event *event) {
   bpf_get_current_comm(event->comm, TASK_COMM_LEN);
 }
 
-SEC("uprobe/cudaMalloc")
+SEC("uprobe/cuMemAlloc")
 int BPF_UPROBE(trace_cuda_malloc_entry, void **devPtr, __u64 size) {
   __u64 pid_tgid = bpf_get_current_pid_tgid();
 
@@ -78,8 +78,8 @@ int BPF_UPROBE(trace_cuda_malloc_entry, void **devPtr, __u64 size) {
   return 0;
 }
 
-// cudaMalloc return
-SEC("uretprobe/cudaMalloc")
+// cuMemAlloc return
+SEC("uretprobe/cuMemAlloc")
 int BPF_URETPROBE(trace_cuda_malloc_return, int ret) {
   if (ret != 0) // cudaSuccess = 0
     return 0;
@@ -117,8 +117,8 @@ cleanup:
   return 0;
 }
 
-// cudaFree: void *devPtr
-SEC("uprobe/cudaFree")
+// cuMemFree: void *devPtr
+SEC("uprobe/cuMemFree")
 int BPF_UPROBE(trace_cuda_free, void *devPtr) {
   __u64 device_ptr = (__u64)devPtr;
 
@@ -145,8 +145,8 @@ int BPF_UPROBE(trace_cuda_free, void *devPtr) {
   return 0;
 }
 
-// cudaMallocManaged: void **devPtr, size_t size, unsigned int flags
-SEC("uprobe/cudaMallocManaged")
+// cuMemAllocManaged: void **devPtr, size_t size, unsigned int flags
+SEC("uprobe/cuMemAllocManaged")
 int BPF_UPROBE(trace_cuda_malloc_managed_entry, void **devPtr, __u64 size,
                unsigned int flags) {
   __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -160,7 +160,7 @@ int BPF_UPROBE(trace_cuda_malloc_managed_entry, void **devPtr, __u64 size,
   return 0;
 }
 
-SEC("uretprobe/cudaMallocManaged")
+SEC("uretprobe/cuMemAllocManaged")
 int BPF_URETPROBE(trace_cuda_malloc_managed_return, int ret) {
   if (ret != 0)
     return 0;
@@ -192,24 +192,6 @@ int BPF_URETPROBE(trace_cuda_malloc_managed_return, int ret) {
 
 cleanup:
   bpf_map_delete_elem(&malloc_temp, &pid_tgid);
-  return 0;
-}
-
-// cudaMemset: void *devPtr, int value, size_t count
-SEC("uprobe/cudaMemset")
-int BPF_UPROBE(trace_cuda_memset, void *devPtr, int value, __u64 count) {
-  struct cuda_alloc_event *event =
-      bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
-  if (!event)
-    return 0;
-
-  populate_event_common(event);
-  event->device_ptr = (__u64)devPtr;
-  event->size = count;
-  event->type = EVENT_MEMSET;
-
-  bpf_ringbuf_submit(event, 0);
-
   return 0;
 }
 

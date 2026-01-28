@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
 )
@@ -58,8 +59,10 @@ type ProcessInfo struct {
 	CUDALibs   []string
 }
 
-// GetRunningProcesses returns all PIDs using CUDA
-func GetRunningProcesses() ([]ProcessInfo, error) {
+type ListProcess []ProcessInfo
+
+// getRunningProcesses returns all PIDs using CUDA
+func getRunningProcesses() (ListProcess, error) {
 
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
@@ -68,7 +71,7 @@ func GetRunningProcesses() ([]ProcessInfo, error) {
 
 	var result []ProcessInfo
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		dev, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
 			continue
@@ -106,4 +109,25 @@ func GetRunningProcesses() ([]ProcessInfo, error) {
 	}
 
 	return result, nil
+}
+
+// Function to check PID is exist in the list of processes it will return ProcessInfo
+func (lp ListProcess) findProcessInfoByPID(pid int) *ProcessInfo {
+	for _, proc := range lp {
+		if int(proc.PID) == pid {
+			return &proc
+		}
+	}
+	return nil
+}
+
+// Function to scan all shared object paths from a list of ProcessInfo
+func (lp ListProcess) getMapLinked(procs []ProcessInfo) *treeset.Set {
+	sharedObjectPaths := treeset.NewWithStringComparator()
+	for _, proc := range procs {
+		for _, lib := range proc.CUDALibs {
+			sharedObjectPaths.Add(lib)
+		}
+	}
+	return sharedObjectPaths
 }
