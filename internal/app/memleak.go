@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // This module is help to work with memory management of GPU through CUDA APIs
-// SPDX-License-Identifier: Apache-2.0
-//
-// Copyright 2026 Vu Nguyen
+
 package app
 
 import (
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/memdriver.c -- -I/usr/include/bpf -I.
@@ -52,29 +54,23 @@ type Stats struct {
 }
 
 func RunMemleakTrace() {
-	procs, err := getRunningProcesses() // TODO: we can filter by PID later
+	procs, err := getRunningProcesses(internal.MemoryleakFlags.Pid) // TODO: we can filter by PID later
 	if err != nil {
-		log.Printf("Failed to get running processes: %v", err)
+		log.Printf("Failed to get processes: %v", err)
+		os.Exit(1)
 	}
 	soPath := getSoPaths(procs)
 	syms := enumerateSymNames("*", procs)
 	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
-		// Attach uprobes by shared object paths
-		attachProbes(libPath, &bpfObjecs, syms)
+		links := attachProbes(libPath, &bpfObjecs, syms)
+		defer func() {
+			for _, l := range links {
+				l.Close()
+			}
+		}()
 	}
-
-	// if internal.MemoryleakFlags.Pid != 0 {
-	// 	pid := internal.MemoryleakFlags.Pid
-	// 	proc := procs.findProcessInfoByPID(int(pid))
-	// 	if proc == nil {
-	// 		log.Fatalf("PID %d is not using CUDA or does not exist.", pid)
-	// 	}
-	// 	fmt.Printf("Tracing memory leaks for PID %d (%s)\n", pid, proc.Comm)
-	// }
-
-	fmt.Println("eBPF objects loaded successfully")
 
 	// Open ring buffer reader
 	rd, err := ringbuf.NewReader(bpfObjecs.CudaEvents)
@@ -98,6 +94,7 @@ func RunMemleakTrace() {
 			record, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, ringbuf.ErrClosed) {
+					fmt.Println("err", err)
 					return
 				}
 				log.Printf("Error reading from ring buffer: %v", err)
@@ -112,7 +109,7 @@ func RunMemleakTrace() {
 	fmt.Println("\nStopping tracer...")
 
 	// Print statistics
-	printStats(stats)
+	// printStats(stats)
 }
 
 func handleEvent(data []byte, stats *Stats) {

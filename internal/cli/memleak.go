@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: Apache-2.0
-//
-// Copyright 2026 Vu Nguyen
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
 
 package cli
 
@@ -22,5 +21,5 @@ var memleakCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(memleakCmd)
 	// Define a local flag for the 'serve' command.
-	memleakCmd.Flags().IntVarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
+	memleakCmd.Flags().Uint32VarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
 }
