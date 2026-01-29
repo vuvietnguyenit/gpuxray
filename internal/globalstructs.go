@@ -5,3 +5,4 @@ type MemleakFlags struct {
 }
 
 var MemoryleakFlags MemleakFlags
+var RemoveMemlock bool

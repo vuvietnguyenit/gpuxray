@@ -23,7 +23,7 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/mem.c -- -I/usr/include/bpf -I.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/memdriver.c -- -I/usr/include/bpf -I.
 
 const (
 	EventMalloc        = 0

@@ -6,12 +6,15 @@ import (
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/internal"
+	"github.com/vuvietnguyenit/gpuxray/internal/app"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "gpuxray",
 	Short: "eBPF tool this help tracing and investigating GPU",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		app.RemoveMemlock()
 		ret := nvml.Init()
 		if ret != nvml.SUCCESS {
 			log.Fatalf("Unable to initialize NVML: %v", nvml.ErrorString(ret))
@@ -30,7 +33,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-
+	rootCmd.PersistentFlags().BoolVar(&internal.RemoveMemlock, "remove-memlock", true, "Remove RLIMIT_MEMLOCK before loading eBPF programs")
 }
 
 func Execute() {

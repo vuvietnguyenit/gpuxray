@@ -11,14 +11,24 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 var bpfObjecs bpfObjects
 
-func init() {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Failed to remove memlock limit: %v", err)
+func RemoveMemlock() error {
+	if !internal.RemoveMemlock {
+		return nil
 	}
+	// Allow the current process to lock memory for eBPF resources.
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return fmt.Errorf("failed to remove memlock limit: %w", err)
+	}
+	log.Println("Removed memlock limit successfully")
+	return nil
+}
+
+func init() {
 	// Load pre-compiled eBPF objects
 	bpfObjecs = bpfObjects{}
 	if err := loadBpfObjects(&bpfObjecs, nil); err != nil {
