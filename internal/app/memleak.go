@@ -63,7 +63,12 @@ func RunMemleakTrace() {
 	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
-		attachProbes(libPath, &bpfObjecs, syms)
+		links := attachProbes(libPath, &bpfObjecs, syms)
+		defer func() {
+			for _, l := range links {
+				l.Close()
+			}
+		}()
 	}
 
 	// Open ring buffer reader
@@ -88,6 +93,7 @@ func RunMemleakTrace() {
 			record, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, ringbuf.ErrClosed) {
+					fmt.Println("err", err)
 					return
 				}
 				log.Printf("Error reading from ring buffer: %v", err)
@@ -113,7 +119,7 @@ func handleEvent(data []byte, stats *Stats) {
 		return
 	}
 
-	// handleAllocEvent(&event, stats)
+	handleAllocEvent(&event, stats)
 }
 
 func handleAllocEvent(event *CudaAllocEvent, stats *Stats) {

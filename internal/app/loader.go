@@ -44,7 +44,7 @@ func init() {
 }
 
 // Attach probes to the given CUDA shared library.
-func attachProbes(cudaLib string, objs *bpfObjects, syms *treeset.Set) {
+func attachProbes(cudaLib string, objs *bpfObjects, syms *treeset.Set) []link.Link {
 	var links []link.Link
 
 	attach := func(symbols []string, prog *ebpf.Program) {
@@ -85,9 +85,5 @@ func attachProbes(cudaLib string, objs *bpfObjects, syms *treeset.Set) {
 	attachRet(internal.FilterTreeSetRegex(syms, "cuMemAlloc*"), objs.TraceCudaMallocReturn)
 	attach(internal.FilterTreeSetRegex(syms, "cuMemFree*"), objs.TraceCudaFree)
 
-	defer func() {
-		for _, l := range links {
-			l.Close()
-		}
-	}()
+	return links
 }
