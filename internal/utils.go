@@ -24,11 +24,11 @@ func FilterByRegex(input []string, pattern string) ([]string, error) {
 func FilterTreeSetRegex(
 	set *treeset.Set,
 	pattern string,
-) ([]string, error) {
+) ([]string) {
 
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	result := []string{}
@@ -40,5 +40,5 @@ func FilterTreeSetRegex(
 		}
 	}
 
-	return result, nil
+	return result
 }

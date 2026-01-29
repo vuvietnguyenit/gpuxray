@@ -17,10 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/memdriver.c -- -I/usr/include/bpf -I.
@@ -55,24 +52,17 @@ type Stats struct {
 }
 
 func RunMemleakTrace() {
-	procs, err := getRunningProcesses()
+	procs, err := getRunningProcesses() // TODO: we can filter by PID later
 	if err != nil {
 		log.Printf("Failed to get running processes: %v", err)
 	}
-	soPath := procs.getMapLinked(procs)
-	apis := procs.enumerateExportedAPINames("*")
-	syscalls, _ := internal.FilterTreeSetRegex(apis, "cuMemAlloc*")
-	fmt.Printf("Enumerated %d CUDA APIs from running processes.\n", syscalls)
+	soPath := getSoPaths(procs)
+	syms := enumerateSymNames("*", procs)
 	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
 		// Attach uprobes by shared object paths
-		links := attachProbes(libPath, &bpfObjecs)
-		defer func() {
-			for _, l := range links {
-				l.Close()
-			}
-		}()
+		attachProbes(libPath, &bpfObjecs, syms)
 	}
 
 	// if internal.MemoryleakFlags.Pid != 0 {
@@ -123,51 +113,6 @@ func RunMemleakTrace() {
 
 	// Print statistics
 	printStats(stats)
-}
-
-func attachProbes(cudaLib string, objs *bpfObjects) []link.Link {
-	var links []link.Link
-
-	// Helper function to attach uprobe
-	attach := func(symbol string, prog *ebpf.Program) {
-		ex, err := link.OpenExecutable(cudaLib)
-		if err != nil {
-			log.Fatalf("Failed to open executable %s: %v", cudaLib, err)
-		}
-
-		l, err := ex.Uprobe(symbol, prog, nil)
-		if err != nil {
-			log.Printf("Warning: Failed to attach uprobe to %s: %v", symbol, err)
-			return
-		}
-		links = append(links, l)
-		fmt.Printf("✓ Attached uprobe to %s\n", symbol)
-	}
-
-	// Helper function to attach uretprobe
-	attachRet := func(symbol string, prog *ebpf.Program) {
-		ex, err := link.OpenExecutable(cudaLib)
-		if err != nil {
-			log.Fatalf("Failed to open executable %s: %v", cudaLib, err)
-		}
-
-		l, err := ex.Uretprobe(symbol, prog, nil)
-		if err != nil {
-			log.Printf("Warning: Failed to attach uretprobe to %s: %v", symbol, err)
-			return
-		}
-		links = append(links, l)
-		fmt.Printf("✓ Attached uretprobe to %s\n", symbol)
-	}
-
-	// Attach all probes
-	attach("cuMemAlloc_v2", objs.TraceCudaMallocEntry)
-	attachRet("cuMemAlloc_v2", objs.TraceCudaMallocReturn)
-	attach("cuMemFree_v2", objs.TraceCudaFree)
-	attach("cuMemAllocManaged_v2", objs.TraceCudaMallocManagedEntry)
-	attachRet("cuMemAllocManaged_v2", objs.TraceCudaMallocManagedReturn)
-
-	return links
 }
 
 func handleEvent(data []byte, stats *Stats) {
