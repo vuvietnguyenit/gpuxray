@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -tags linux -target amd64 bpf ../ebpf/memdriver.c -- -I/usr/include/bpf -I.
@@ -52,29 +53,18 @@ type Stats struct {
 }
 
 func RunMemleakTrace() {
-	procs, err := getRunningProcesses() // TODO: we can filter by PID later
+	procs, err := getRunningProcesses(internal.MemoryleakFlags.Pid) // TODO: we can filter by PID later
 	if err != nil {
-		log.Printf("Failed to get running processes: %v", err)
+		log.Printf("Failed to get processes: %v", err)
+		os.Exit(1)
 	}
 	soPath := getSoPaths(procs)
 	syms := enumerateSymNames("*", procs)
 	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
-		// Attach uprobes by shared object paths
 		attachProbes(libPath, &bpfObjecs, syms)
 	}
-
-	// if internal.MemoryleakFlags.Pid != 0 {
-	// 	pid := internal.MemoryleakFlags.Pid
-	// 	proc := procs.findProcessInfoByPID(int(pid))
-	// 	if proc == nil {
-	// 		log.Fatalf("PID %d is not using CUDA or does not exist.", pid)
-	// 	}
-	// 	fmt.Printf("Tracing memory leaks for PID %d (%s)\n", pid, proc.Comm)
-	// }
-
-	fmt.Println("eBPF objects loaded successfully")
 
 	// Open ring buffer reader
 	rd, err := ringbuf.NewReader(bpfObjecs.CudaEvents)
@@ -112,7 +102,7 @@ func RunMemleakTrace() {
 	fmt.Println("\nStopping tracer...")
 
 	// Print statistics
-	printStats(stats)
+	// printStats(stats)
 }
 
 func handleEvent(data []byte, stats *Stats) {
@@ -123,7 +113,7 @@ func handleEvent(data []byte, stats *Stats) {
 		return
 	}
 
-	handleAllocEvent(&event, stats)
+	// handleAllocEvent(&event, stats)
 }
 
 func handleAllocEvent(event *CudaAllocEvent, stats *Stats) {

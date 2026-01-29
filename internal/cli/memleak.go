@@ -22,5 +22,5 @@ var memleakCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(memleakCmd)
 	// Define a local flag for the 'serve' command.
-	memleakCmd.Flags().IntVarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
+	memleakCmd.Flags().Uint32VarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "trace GPU memory leaked by PID")
 }

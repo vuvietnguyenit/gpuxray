@@ -1,7 +1,7 @@
 package internal
 
 type MemleakFlags struct {
-	Pid int
+	Pid uint32
 }
 
 var MemoryleakFlags MemleakFlags
