@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // Declare the function to help operate with eBPF objects
-// SPDX-License-Identifier: Apache-2.0
-//
-// Copyright 2026 Vu Nguyen
 package app
 
 import (

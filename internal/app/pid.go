@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // This module is created to operate on processes are runnning GPU.
-// SPDX-License-Identifier: Apache-2.0
-//
-// Copyright 2026 Vu Nguyen
 package app
 
 import (

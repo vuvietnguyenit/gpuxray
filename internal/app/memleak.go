@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // This module is help to work with memory management of GPU through CUDA APIs
-// SPDX-License-Identifier: Apache-2.0
-//
-// Copyright 2026 Vu Nguyen
+
 package app
 
 import (

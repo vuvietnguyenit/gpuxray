@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 package internal
 
 import (
@@ -24,7 +27,7 @@ func FilterByRegex(input []string, pattern string) ([]string, error) {
 func FilterTreeSetRegex(
 	set *treeset.Set,
 	pattern string,
-) ([]string) {
+) []string {
 
 	re, err := regexp.Compile(pattern)
 	if err != nil {
