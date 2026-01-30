@@ -3,10 +3,8 @@
 
 package main
 
-import (
-	"github.com/vuvietnguyenit/gpuxray/internal/cli"
-)
+import "github.com/vuvietnguyenit/gpuxray/cmd"
 
 func main() {
-	cli.Execute()
+	cmd.Execute()
 }

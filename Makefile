@@ -14,22 +14,7 @@ EBPF_PROG_FOLDER := ./internal/ebpf
 APP_FOLDER := ./internal/app
 VMLINUX_BTF := /sys/kernel/btf/vmlinux
 
-all: vmlinux generate build
-
-# Generate vmlinux.h from BTF as skeleton for CO-RE
-vmlinux:
-	@echo "Generating vmlinux.h from BTF..."
-	@if [ ! -f $(VMLINUX_BTF) ]; then \
-		echo "Error: BTF not found at $(VMLINUX_BTF)"; \
-		echo "Your kernel may not have BTF support enabled"; \
-		exit 1; \
-	fi
-	@if ! command -v bpftool > /dev/null; then \
-		echo "Error: bpftool not found. Please install it."; \
-		exit 1; \
-	fi
-	bpftool btf dump file $(VMLINUX_BTF) format c > $(EBPF_PROG_FOLDER)/$(VMLINUX_H)
-	@echo "✓ Generated $(VMLINUX_H)"
+all: generate build
 
 # Generate Go bindings from eBPF code
 generate: vmlinux

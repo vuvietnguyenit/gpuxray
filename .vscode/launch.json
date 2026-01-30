@@ -12,7 +12,7 @@
             "program": "${workspaceFolder}/main.go",
             "preLaunchTask": "make: build",
             "args": [
-                "memleak",
+                "memtrace",
             ]
         },
         {
@@ -23,7 +23,7 @@
             "program": "${workspaceFolder}/main.go",
             "preLaunchTask": "make: build",
             "args": [
-                "memleak",
+                "memtrace",
                 "-p", "1"
             ]
         }

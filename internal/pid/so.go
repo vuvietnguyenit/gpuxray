@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Vu Nguyen
 
-package app
+package pid
 
 import (
 	"debug/elf"
@@ -11,7 +11,7 @@ import (
 )
 
 // Function to scan all shared object paths from a list of ProcessInfo
-func getSoPaths(procs []ProcessInfo) *treeset.Set {
+func GetSoPaths(procs []ProcessInfo) *treeset.Set {
 	sharedObjectPaths := treeset.NewWithStringComparator()
 	for _, proc := range procs {
 		for _, lib := range proc.CUDALibs {
@@ -27,7 +27,7 @@ func getSoPaths(procs []ProcessInfo) *treeset.Set {
 // prefix = "cudaMalloc" will enumerate all APIs related to Memory Management of CUDA Runtime API
 // prefix = * will enumerate all exported APIs from the CUDA shared libraries
 
-func enumerateSym(prefix string, p ProcessInfo) ([]elf.Symbol, error) {
+func EnumerateSym(prefix string, p ProcessInfo) ([]elf.Symbol, error) {
 	var result []elf.Symbol
 	for _, path := range p.CUDALibs {
 		syms, err := elf.Open(path)
@@ -55,10 +55,10 @@ func enumerateSym(prefix string, p ProcessInfo) ([]elf.Symbol, error) {
 	return result, nil
 }
 
-func enumerateSymNames(prefix string, lp ListProcess) *treeset.Set {
+func EnumerateSymNames(prefix string, lp ListProcess) *treeset.Set {
 	result := treeset.NewWithStringComparator()
 	for _, proc := range lp {
-		syms, err := enumerateSym(prefix, proc)
+		syms, err := EnumerateSym(prefix, proc)
 		if err != nil {
 			continue
 		}

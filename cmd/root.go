@@ -1,23 +1,37 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Vu Nguyen
 
-package cli
+package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/cmd/memleak"
 	"github.com/vuvietnguyenit/gpuxray/internal"
-	"github.com/vuvietnguyenit/gpuxray/internal/app"
 )
+
+func removeMemlock() error {
+	if !internal.RemoveMemlock {
+		return nil
+	}
+	// Allow the current process to lock memory for eBPF resources.
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return fmt.Errorf("failed to remove memlock limit: %w", err)
+	}
+	log.Println("Removed memlock limit successfully")
+	return nil
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "gpuxray",
 	Short: "eBPF tool this help tracing and investigating GPU",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		app.RemoveMemlock()
+		removeMemlock()
 		ret := nvml.Init()
 		if ret != nvml.SUCCESS {
 			log.Fatalf("Unable to initialize NVML: %v", nvml.ErrorString(ret))
@@ -37,6 +51,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&internal.RemoveMemlock, "remove-memlock", true, "Remove RLIMIT_MEMLOCK before loading eBPF programs")
+	rootCmd.AddCommand(memleak.NewCmd())
 }
 
 func Execute() {

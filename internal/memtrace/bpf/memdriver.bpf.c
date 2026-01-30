@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Vu Nguyen
 
 // go:build ignore
+// +build ignore
 
-#include "vmlinux.h"
+#include "../../bpf/headers/vmlinux.h"
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -21,21 +22,20 @@ enum event_type {
 };
 
 // Structure for allocation/free events
-struct cuda_alloc_event {
+struct cu_mem_alloc_event {
   __u32 pid;
   __u32 tid;
   __u64 timestamp;
   __u64 size;
   __u64 device_ptr;
-  __u8 comm[TASK_COMM_LEN];
   __u32 type;
 } __attribute__((packed));
 
-// Ring buffer for events
+// Ring buffer for memory-leaked events
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, 256 * 1024); // 256 KB
-} cuda_events SEC(".maps");
+} memleak_ringbuf_events SEC(".maps");
 
 // Hash map to track allocations (device_ptr -> size)
 struct {
@@ -60,16 +60,15 @@ struct {
 
 // Helper to populate common event fields
 static __always_inline void
-populate_event_common(struct cuda_alloc_event *event) {
+populate_event_common(struct cu_mem_alloc_event *event) {
   __u64 pid_tgid = bpf_get_current_pid_tgid();
   event->pid = pid_tgid >> 32;
   event->tid = (__u32)pid_tgid;
   event->timestamp = bpf_ktime_get_ns();
-  bpf_get_current_comm(event->comm, TASK_COMM_LEN);
 }
 
 SEC("uprobe/cuMemAlloc")
-int BPF_UPROBE(trace_cuda_malloc_entry, void **devPtr, __u64 size) {
+int BPF_UPROBE(trace_cu_mem_malloc_entry, void **devPtr, __u64 size) {
   __u64 pid_tgid = bpf_get_current_pid_tgid();
 
   struct malloc_info info = {};
@@ -83,7 +82,7 @@ int BPF_UPROBE(trace_cuda_malloc_entry, void **devPtr, __u64 size) {
 
 // cuMemAlloc return
 SEC("uretprobe/cuMemAlloc")
-int BPF_URETPROBE(trace_cuda_malloc_return, int ret) {
+int BPF_URETPROBE(trace_cu_mem_malloc_return, int ret) {
   if (ret != 0) // cudaSuccess = 0
     return 0;
 
@@ -98,8 +97,8 @@ int BPF_URETPROBE(trace_cuda_malloc_return, int ret) {
   bpf_probe_read_user(&device_ptr, sizeof(device_ptr), devptr_ptr);
 
   // Reserve space in ring buffer
-  struct cuda_alloc_event *event =
-      bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
+  struct cu_mem_alloc_event *event =
+      bpf_ringbuf_reserve(&memleak_ringbuf_events, sizeof(*event), 0);
   if (!event)
     goto cleanup;
 
@@ -122,11 +121,11 @@ cleanup:
 
 // cuMemFree: void *devPtr
 SEC("uprobe/cuMemFree")
-int BPF_UPROBE(trace_cuda_free, void *devPtr) {
+int BPF_UPROBE(trace_cu_mem_free, void *devPtr) {
   __u64 device_ptr = (__u64)devPtr;
 
-  struct cuda_alloc_event *event =
-      bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
+  struct cu_mem_alloc_event *event =
+      bpf_ringbuf_reserve(&memleak_ringbuf_events, sizeof(*event), 0);
   if (!event)
     return 0;
 
@@ -150,7 +149,7 @@ int BPF_UPROBE(trace_cuda_free, void *devPtr) {
 
 // cuMemAllocManaged: void **devPtr, size_t size, unsigned int flags
 SEC("uprobe/cuMemAllocManaged")
-int BPF_UPROBE(trace_cuda_malloc_managed_entry, void **devPtr, __u64 size,
+int BPF_UPROBE(trace_cu_mem_malloc_managed_entry, void **devPtr, __u64 size,
                unsigned int flags) {
   __u64 pid_tgid = bpf_get_current_pid_tgid();
 
@@ -164,7 +163,7 @@ int BPF_UPROBE(trace_cuda_malloc_managed_entry, void **devPtr, __u64 size,
 }
 
 SEC("uretprobe/cuMemAllocManaged")
-int BPF_URETPROBE(trace_cuda_malloc_managed_return, int ret) {
+int BPF_URETPROBE(trace_cu_mem_malloc_managed_return, int ret) {
   if (ret != 0)
     return 0;
 
@@ -177,8 +176,8 @@ int BPF_URETPROBE(trace_cuda_malloc_managed_return, int ret) {
   __u64 device_ptr = 0;
   bpf_probe_read_user(&device_ptr, sizeof(device_ptr), devptr_ptr);
 
-  struct cuda_alloc_event *event =
-      bpf_ringbuf_reserve(&cuda_events, sizeof(*event), 0);
+  struct cu_mem_alloc_event *event =
+      bpf_ringbuf_reserve(&memleak_ringbuf_events, sizeof(*event), 0);
   if (!event)
     goto cleanup;
 

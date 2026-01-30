@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Vu Nguyen
 
 // This module is created to operate on processes are runnning GPU.
-package app
+package pid
 
 import (
 	"fmt"
@@ -78,8 +78,8 @@ func inspectProc(pid uint32) *ProcessInfo {
 	}
 }
 
-// getRunningProcesses returns all PIDs using CUDA
-func getRunningProcesses(pid uint32) (ListProcess, error) {
+// GetRunningProcesses returns all PIDs using CUDA
+func GetRunningProcesses(pid uint32) (ListProcess, error) {
 	if pid != 0 && !pidExists(pid) {
 		return nil, fmt.Errorf("pid %d does not exist", pid)
 	}
@@ -139,4 +139,14 @@ func isGPUPidExist(pid uint32, procs []nvml.ProcessInfo) bool {
 		}
 	}
 	return false
+}
+
+func (pl ListProcess) getDeviceIDByPid(pid uint32) int {
+	// we had a list process, so we only need to find in this list to get deviceID by process
+	for _, p := range pl {
+		if p.PID == pid {
+			return p.DeviceID
+		}
+	}
+	return -1
 }
