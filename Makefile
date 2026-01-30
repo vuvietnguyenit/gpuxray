@@ -10,7 +10,7 @@ ARCH := $(shell uname -m)
 # eBPF related
 BPF_SOURCE := cuda_trace.c
 VMLINUX_H := vmlinux.h
-EBPF_PROG_FOLDER := ./internal/ebpf
+EBPF_PROG_FOLDER := ./internal/bpf/headers
 APP_FOLDER := ./internal/app
 VMLINUX_BTF := /sys/kernel/btf/vmlinux
 
@@ -44,7 +44,6 @@ run: build
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -f $(BINARY)
-	rm -f $(APP_FOLDER)/bpf_*_bpfel.go $(APP_FOLDER)/bpf_*_bpfel.o
 	rm -f $(EBPF_PROG_FOLDER)/$(VMLINUX_H)
 	$(GO) clean
 	@echo "✓ Clean complete"
