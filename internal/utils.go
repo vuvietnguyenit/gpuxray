@@ -4,7 +4,9 @@
 package internal
 
 import (
+	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/emirpasic/gods/sets/treeset"
 )
@@ -44,4 +46,83 @@ func FilterTreeSetRegex(
 	}
 
 	return result
+}
+
+var (
+	validCUDALibs = []string{
+		"libcuda.so",
+		"libcudart.so",
+	}
+
+	systemPrefixes = []string{
+		"/usr/lib/",
+		"/usr/lib64/",
+		"/lib/",
+		"/lib64/",
+		"/usr/local/cuda/",
+	}
+
+	rejectHints = []string{
+		"/site-packages/",
+		"/.venv/",
+		"/venv/",
+		"/home/",
+	}
+)
+
+func FilterValidCUDASharedObjects(in *treeset.Set) *treeset.Set {
+	out := treeset.NewWithStringComparator()
+
+	if in == nil || in.Empty() {
+		return out
+	}
+
+	for _, v := range in.Values() {
+		path, ok := v.(string)
+		if !ok {
+			continue
+		}
+
+		if !isCUDALib(path) {
+			continue
+		}
+
+		if isRejectedPath(path) {
+			continue
+		}
+
+		if isSystemPath(path) {
+			out.Add(path)
+		}
+	}
+
+	return out
+}
+
+func isCUDALib(path string) bool {
+	base := filepath.Base(path)
+	for _, lib := range validCUDALibs {
+		if strings.HasPrefix(base, lib) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRejectedPath(path string) bool {
+	for _, hint := range rejectHints {
+		if strings.Contains(path, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSystemPath(path string) bool {
+	for _, prefix := range systemPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }

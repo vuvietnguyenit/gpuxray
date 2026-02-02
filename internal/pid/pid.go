@@ -14,6 +14,7 @@ import (
 	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 )
 
 func getCUDASharedObject(pid int) ([]string, error) {
@@ -202,6 +203,7 @@ func (pi ListPIDInspection) GetSoPaths() *treeset.Set {
 			sharedObjectPaths.Add(lib)
 		}
 	}
+	sharedObjectPaths = internal.FilterValidCUDASharedObjects(sharedObjectPaths)
 	return sharedObjectPaths
 }
 
