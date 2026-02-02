@@ -4,6 +4,7 @@
 package internal
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -114,4 +115,30 @@ func isSystemPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func Truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
+}
+
+func HumanBytes(b uint64) string {
+	const unit = 1024
+
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	value := float64(b) / float64(div)
+	suffix := "KMGTPE"[exp]
+
+	return fmt.Sprintf("%.2f %ciB", value, suffix)
 }
