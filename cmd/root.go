@@ -51,6 +51,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&internal.RemoveMemlock, "remove-memlock", true, "Remove RLIMIT_MEMLOCK before loading eBPF programs")
+	rootCmd.PersistentFlags().IntVarP(&internal.FetchInterval, "fetch-interval", "i", 5, "Interval in seconds to fetch GPU tracing console")
 	rootCmd.AddCommand(memleak.NewCmd())
 }
 
