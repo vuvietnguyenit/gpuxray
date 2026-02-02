@@ -51,14 +51,19 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer objs.Close()
-
-	procs, err := pid.GetRunningProcesses(uint32(Pid))
-	if err != nil {
-		log.Printf("Failed to get processes: %v", err)
-		os.Exit(1)
+	var pids pid.ListPIDInspection
+	if Pid != 0 {
+		process := pid.InspectPID(int32(Pid))
+		pids = append(pids, process)
+	} else {
+		pids, err = pid.GetRunningProcesses()
+		if err != nil {
+			log.Printf("Failed to get running GPU processes: %v", err)
+			os.Exit(1)
+		}
 	}
-	soPath := pid.GetSoPaths(procs)
-	syms := pid.EnumerateSymNames("*", procs)
+	soPath := pids.GetSoPaths()
+	syms := pids.EnumerateSymNames("*")
 	for el := soPath.Iterator(); el.Next(); {
 		libPath := el.Value().(string)
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)

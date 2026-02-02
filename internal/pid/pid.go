@@ -5,12 +5,13 @@
 package pid
 
 import (
+	"debug/elf"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
 )
@@ -46,7 +47,8 @@ func getCUDASharedObject(pid int) ([]string, error) {
 	return out, nil
 }
 
-type ProcessInfo struct {
+// USProcessInfo defines the structure to hold information about a user-space process using GPU
+type USProcessInfo struct {
 	PID      uint32
 	Comm     string
 	Args     string
@@ -54,99 +56,199 @@ type ProcessInfo struct {
 	CUDALibs []string
 }
 
-type ListProcess []ProcessInfo
+type GPUUsage struct {
+	DeviceIndex int
+	UUID        string
+	UsedMemory  uint64
+}
+
+type PIDInspection struct {
+	Process USProcessInfo
+	GPUs    []GPUUsage
+	Errors  []string
+}
+
+type ListProcess []USProcessInfo
 
 // get properties of a process given its PID and device ID. Inpsect to PID to get more infomation of process
-func inspectProc(pid uint32) *ProcessInfo {
+func inspectProc(pid uint32) (USProcessInfo, error) {
 	p, err := process.NewProcess(int32(pid))
 	if err != nil {
 		log.Printf("Failed to get process info for PID %d: %v", p.Pid, err)
-		return nil
+		return USProcessInfo{}, err
 	}
 	comm, _ := p.Name()
 	args, _ := p.Cmdline()
 	cudaLibs, err := getCUDASharedObject(int(pid))
 	if err != nil {
 		log.Printf("Failed to get CUDA shared objects for PID %d: %v", p.Pid, err)
-		return nil
+		return USProcessInfo{}, err
 	}
-	return &ProcessInfo{
+	return USProcessInfo{
 		PID:      uint32(pid),
 		Comm:     comm,
 		Args:     args,
 		CUDALibs: cudaLibs,
+	}, nil
+}
+
+func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
+	var usages []GPUUsage
+
+	ret := nvml.Init()
+	if ret != nvml.SUCCESS {
+		return nil, fmt.Errorf("nvml.Init: %s", nvml.ErrorString(ret))
 	}
+	defer nvml.Shutdown()
+
+	count, ret := nvml.DeviceGetCount()
+	if ret != nvml.SUCCESS {
+		return nil, fmt.Errorf("nvml.DeviceGetCount: %s", nvml.ErrorString(ret))
+	}
+
+	for i := 0; i < count; i++ {
+		device, ret := nvml.DeviceGetHandleByIndex(i)
+		if ret != nvml.SUCCESS {
+			continue
+		}
+
+		uuid, _ := device.GetUUID()
+
+		procs, ret := device.GetComputeRunningProcesses()
+		if ret != nvml.SUCCESS {
+			continue
+		}
+
+		for _, p := range procs {
+			if int32(p.Pid) == pid {
+				usages = append(usages, GPUUsage{
+					DeviceIndex: i,
+					UUID:        uuid,
+					UsedMemory:  p.UsedGpuMemory,
+				})
+			}
+		}
+	}
+
+	return usages, nil
+}
+
+func InspectPID(pid int32) PIDInspection {
+	result := PIDInspection{}
+
+	proc, err := inspectProc(uint32(pid))
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	result.Process = proc
+	gpus, err := inspectGPUUsage(pid)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+	}
+	result.GPUs = gpus
+
+	return result
 }
 
 // GetRunningProcesses returns all PIDs using CUDA
-func GetRunningProcesses(pid uint32) (ListProcess, error) {
-	if pid != 0 && !pidExists(pid) {
-		return nil, fmt.Errorf("pid %d does not exist", pid)
+func GetRunningProcesses() ([]PIDInspection, error) {
+	ret := nvml.Init()
+	if ret != nvml.SUCCESS {
+		return nil, fmt.Errorf("nvml init failed: %s", nvml.ErrorString(ret))
 	}
+	defer nvml.Shutdown()
 
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("DeviceGetCount: %s", nvml.ErrorString(ret))
 	}
-	var result []ProcessInfo
-	found := false
+
+	gpuPIDs := make(map[uint32]struct{})
+
 	for i := range count {
 		dev, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
-			log.Print("DeviceGetHandleByIndex: ", nvml.ErrorString(ret))
+			log.Printf("DeviceGetHandleByIndex(%d): %s", i, nvml.ErrorString(ret))
 			continue
 		}
-		// step get all processes using this GPU
+
 		procs, ret := dev.GetComputeRunningProcesses()
 		if ret != nvml.SUCCESS {
-			log.Print("GetComputeRunningProcesses: ", nvml.ErrorString(ret))
+			log.Printf("GetComputeRunningProcesses: %s", nvml.ErrorString(ret))
 			continue
 		}
-		if pid != 0 {
-			if isGPUPidExist(pid, procs) {
-				result = append(result, *inspectProc(pid))
-				found = true
-				break // PID found → stop scanning GPUs
-			}
-		} else {
-			if len(procs) == 0 {
-				// No processes using this GPU
-				continue
-			} else {
-				for _, proc := range procs {
-					result = append(result, *inspectProc(proc.Pid))
+
+		for _, p := range procs {
+			gpuPIDs[p.Pid] = struct{}{}
+		}
+	}
+
+	results := make([]PIDInspection, 0, len(gpuPIDs))
+	for pid := range gpuPIDs {
+		results = append(results, InspectPID(int32(pid)))
+	}
+
+	return results, nil
+}
+
+type ListPIDInspection []PIDInspection
+
+// Function to scan all shared object paths from a list of PIDInspection
+func (pi ListPIDInspection) GetSoPaths() *treeset.Set {
+	sharedObjectPaths := treeset.NewWithStringComparator()
+	for _, proc := range pi {
+		for _, lib := range proc.Process.CUDALibs {
+			sharedObjectPaths.Add(lib)
+		}
+	}
+	return sharedObjectPaths
+}
+
+func (pi ListPIDInspection) EnumerateSymNames(prefix string) *treeset.Set {
+	result := treeset.NewWithStringComparator()
+	for _, proc := range pi {
+		syms, err := EnumerateSym(prefix, proc.Process)
+		if err != nil {
+			continue
+		}
+		for _, sym := range syms {
+			result.Add(sym.Name)
+		}
+	}
+	return result
+}
+
+// Function to enumerate exported APIs from a process's CUDA shared libraries, can provide a prefix
+// to enumerate specific APIs related to what CUDA function we want to inspect to.
+// For example, prefix = "cuMem" will enumerate all APIs related to Memory Management of CUDA Driver API
+// prefix = "cudaMalloc" will enumerate all APIs related to Memory Management of CUDA Runtime API
+// prefix = * will enumerate all exported APIs from the CUDA shared libraries
+
+func EnumerateSym(prefix string, p USProcessInfo) ([]elf.Symbol, error) {
+	var result []elf.Symbol
+	for _, path := range p.CUDALibs {
+		syms, err := elf.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer syms.Close()
+
+		symsList, err := syms.DynamicSymbols()
+		if err != nil {
+			return nil, err
+		}
+		if prefix != "*" {
+			var filtered []elf.Symbol
+			for _, sym := range symsList {
+				if strings.HasPrefix(sym.Name, prefix) {
+					filtered = append(filtered, sym)
 				}
 			}
+			result = append(result, filtered...)
+		} else {
+			result = append(result, symsList...)
 		}
-
 	}
-	if pid != 0 && !found {
-		return nil, fmt.Errorf("pid %d exists but is not using GPU", pid)
-	}
-
 	return result, nil
-}
-
-func pidExists(pid uint32) bool {
-	_, err := os.Stat(fmt.Sprintf("/proc/%d", pid))
-	return err == nil
-}
-
-func isGPUPidExist(pid uint32, procs []nvml.ProcessInfo) bool {
-	for _, p := range procs {
-		if p.Pid == pid {
-			return true
-		}
-	}
-	return false
-}
-
-func (pl ListProcess) getDeviceIDByPid(pid uint32) int {
-	// we had a list process, so we only need to find in this list to get deviceID by process
-	for _, p := range pl {
-		if p.PID == pid {
-			return p.DeviceID
-		}
-	}
-	return -1
 }
