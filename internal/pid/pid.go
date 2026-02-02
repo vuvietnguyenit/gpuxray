@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
-	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/vuvietnguyenit/gpuxray/internal"
@@ -32,19 +31,11 @@ func getCUDASharedObject(pid int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	libs := make(map[string]struct{})
-	for _, m := range maps {
-		if strings.Contains(m.Pathname, "libcuda.so") || strings.Contains(m.Pathname, "libcudart.so") {
-			libs[m.Pathname] = struct{}{} // TODO: in future, we can add more information such as address range
-			continue
-		}
+	out := make([]string, 0, len(maps))
+	for _, lib := range maps {
+		out = append(out, lib.Pathname)
 	}
-	out := make([]string, 0, len(libs))
-	for lib := range libs {
-		out = append(out, lib)
-	}
-
+	out = internal.FilterValidCUDASharedObjects(out)
 	return out, nil
 }
 
@@ -196,29 +187,29 @@ func GetRunningProcesses() ([]PIDInspection, error) {
 type ListPIDInspection []PIDInspection
 
 // Function to scan all shared object paths from a list of PIDInspection
-func (pi ListPIDInspection) GetSoPaths() *treeset.Set {
-	sharedObjectPaths := treeset.NewWithStringComparator()
+func (pi ListPIDInspection) GetSoPaths() []string {
+	var sharedObjectPaths []string
 	for _, proc := range pi {
 		for _, lib := range proc.Process.CUDALibs {
-			sharedObjectPaths.Add(lib)
+			sharedObjectPaths = append(sharedObjectPaths, lib)
 		}
 	}
 	sharedObjectPaths = internal.FilterValidCUDASharedObjects(sharedObjectPaths)
 	return sharedObjectPaths
 }
 
-func (pi ListPIDInspection) EnumerateSymNames(prefix string) *treeset.Set {
-	result := treeset.NewWithStringComparator()
+func (pi ListPIDInspection) EnumerateSymNames(prefix string) []string {
+	var result []string
 	for _, proc := range pi {
 		syms, err := EnumerateSym(prefix, proc.Process)
 		if err != nil {
 			continue
 		}
 		for _, sym := range syms {
-			result.Add(sym.Name)
+			result = append(result, sym.Name)
 		}
 	}
-	return result
+	return internal.Deduplicate(result)
 }
 
 // Function to enumerate exported APIs from a process's CUDA shared libraries, can provide a prefix

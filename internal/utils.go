@@ -7,45 +7,40 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/emirpasic/gods/sets/treeset"
 )
 
-func FilterByRegex(input []string, pattern string) ([]string, error) {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []string
-	for _, s := range input {
-		if re.MatchString(s) {
-			result = append(result, s)
-		}
-	}
-	return result, nil
-}
-
-func FilterTreeSetRegex(
-	set *treeset.Set,
+func FilterSliceRegex(
+	in []string,
 	pattern string,
 ) []string {
-
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil
 	}
 
-	result := []string{}
-	it := set.Iterator()
-	for it.Next() {
-		val := it.Value().(string)
-		if re.MatchString(val) {
-			result = append(result, val)
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if re.MatchString(v) {
+			out = append(out, v)
 		}
 	}
 
-	return result
+	return out
+}
+
+func Deduplicate[T comparable](in []T) []T {
+	seen := make(map[T]struct{}, len(in))
+	out := make([]T, 0, len(in))
+
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	return out
 }
 
 var (
@@ -70,19 +65,14 @@ var (
 	}
 )
 
-func FilterValidCUDASharedObjects(in *treeset.Set) *treeset.Set {
-	out := treeset.NewWithStringComparator()
+func FilterValidCUDASharedObjects(in []string) []string {
+	var out []string
 
-	if in == nil || in.Empty() {
+	if len(in) == 0 {
 		return out
 	}
 
-	for _, v := range in.Values() {
-		path, ok := v.(string)
-		if !ok {
-			continue
-		}
-
+	for _, path := range in {
 		if !isCUDALib(path) {
 			continue
 		}
@@ -92,11 +82,10 @@ func FilterValidCUDASharedObjects(in *treeset.Set) *treeset.Set {
 		}
 
 		if isSystemPath(path) {
-			out.Add(path)
+			out = append(out, path)
 		}
 	}
-
-	return out
+	return Deduplicate(out)
 }
 
 func isCUDALib(path string) bool {

@@ -64,8 +64,7 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	}
 	soPath := pids.GetSoPaths()
 	syms := pids.EnumerateSymNames("*")
-	for el := soPath.Iterator(); el.Next(); {
-		libPath := el.Value().(string)
+	for _, libPath := range soPath {
 		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
 		links := memtrace.AttachProbes(libPath, objs, syms)
 		defer func() {

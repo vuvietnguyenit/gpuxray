@@ -9,7 +9,6 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace/gen"
 )
@@ -34,7 +33,7 @@ func (o *Objects) Close() error {
 	return o.MemdriverObjects.Close()
 }
 
-func AttachProbes(cudaLib string, objs *Objects, syms *treeset.Set) []link.Link {
+func AttachProbes(cudaLib string, objs *Objects, syms []string) []link.Link {
 	var links []link.Link
 
 	attach := func(symbols []string, prog *ebpf.Program) {
@@ -71,11 +70,10 @@ func AttachProbes(cudaLib string, objs *Objects, syms *treeset.Set) []link.Link 
 	}
 
 	// Attach all probes
-	attach(internal.FilterTreeSetRegex(syms, "cuMemAlloc*"), objs.TraceCuMemMallocEntry)
-	attachRet(internal.FilterTreeSetRegex(syms, "cuMemAlloc*"), objs.TraceCuMemMallocReturn)
-	attach(internal.FilterTreeSetRegex(syms, "cuMemFree*"), objs.TraceCuMemFree)
-	attach(internal.FilterTreeSetRegex(syms, "cuMemAllocManaged*"), objs.TraceCuMemMallocManagedEntry)
-	attachRet(internal.FilterTreeSetRegex(syms, "cuMemAllocManaged*"), objs.TraceCuMemMallocManagedReturn)
-
+	attach(internal.FilterSliceRegex(syms, "cuMemAlloc*"), objs.TraceCuMemMallocEntry)
+	attachRet(internal.FilterSliceRegex(syms, "cuMemAlloc*"), objs.TraceCuMemMallocReturn)
+	attach(internal.FilterSliceRegex(syms, "cuMemFree*"), objs.TraceCuMemFree)
+	attach(internal.FilterSliceRegex(syms, "cuMemAllocManaged*"), objs.TraceCuMemMallocManagedEntry)
+	attachRet(internal.FilterSliceRegex(syms, "cuMemAllocManaged*"), objs.TraceCuMemMallocManagedReturn)
 	return links
 }
