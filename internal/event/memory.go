@@ -18,8 +18,7 @@ type Event interface {
 }
 
 const (
-	MemUnknown MemoryEventType = iota
-	MemAlloc
+	MemAlloc MemoryEventType = iota
 	MemFree
 	MemMemcpy
 	MemMemset
