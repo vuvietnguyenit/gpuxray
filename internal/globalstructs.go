@@ -9,3 +9,4 @@ type MemleakFlags struct {
 
 var MemoryleakFlags MemleakFlags
 var RemoveMemlock bool
+var FetchInterval int
