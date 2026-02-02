@@ -1,0 +1,73 @@
+// simplified just create a map and store inspections on it witk key as pid
+package pid
+
+import "sync"
+
+type PIDCache struct {
+	mu    sync.RWMutex
+	cache map[uint32]PIDInspection
+}
+
+func NewPIDCache() *PIDCache {
+	return &PIDCache{
+		cache: make(map[uint32]PIDInspection),
+	}
+}
+
+func (c *PIDCache) Get(pid uint32) (PIDInspection, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	ins, ok := c.cache[pid]
+	return ins, ok
+}
+
+func (c *PIDCache) Set(pid uint32, ins PIDInspection) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.cache[pid] = ins
+}
+
+// This avoids duplicate work when ringbuf fires repeatedly for the same PID.
+func (c *PIDCache) GetOrInspect(
+	pid uint32,
+	inspect func(uint32) (PIDInspection, error),
+) PIDInspection {
+
+	// fast path
+	if ins, ok := c.Get(pid); ok {
+		return ins
+	}
+
+	// slow path
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// double-check after lock
+	if ins, ok := c.cache[pid]; ok {
+		return ins
+	}
+
+	ins, err := inspect(pid)
+	if err != nil {
+		ins.Errors = append(ins.Errors, err.Error())
+	}
+
+	c.cache[pid] = ins
+	return ins
+}
+
+func (c *PIDCache) Delete(pid uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.cache, pid)
+}
+
+func (c *PIDCache) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.cache = make(map[uint32]PIDInspection)
+}

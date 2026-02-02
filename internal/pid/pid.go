@@ -44,14 +44,12 @@ type USProcessInfo struct {
 	PID      uint32
 	Comm     string
 	Args     string
-	DeviceID int
 	CUDALibs []string
 }
 
 type GPUUsage struct {
 	DeviceIndex int
 	UUID        string
-	UsedMemory  uint64
 }
 
 type PIDInspection struct {
@@ -98,7 +96,7 @@ func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
 		return nil, fmt.Errorf("nvml.DeviceGetCount: %s", nvml.ErrorString(ret))
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		device, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
 			continue
@@ -116,7 +114,6 @@ func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
 				usages = append(usages, GPUUsage{
 					DeviceIndex: i,
 					UUID:        uuid,
-					UsedMemory:  p.UsedGpuMemory,
 				})
 			}
 		}
@@ -210,6 +207,14 @@ func (pi ListPIDInspection) EnumerateSymNames(prefix string) []string {
 		}
 	}
 	return internal.Deduplicate(result)
+}
+
+func (pi ListPIDInspection) InitPidCache() *PIDCache {
+	cache := NewPIDCache()
+	for _, proc := range pi {
+		cache.Set(proc.Process.PID, proc)
+	}
+	return cache
 }
 
 // Function to enumerate exported APIs from a process's CUDA shared libraries, can provide a prefix

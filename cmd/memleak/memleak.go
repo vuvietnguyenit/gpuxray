@@ -51,6 +51,7 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer objs.Close()
+	// TODO: In the future, we need to do something to make interval update result in screen
 	var pids pid.ListPIDInspection
 	if Pid != 0 {
 		process := pid.InspectPID(int32(Pid))
@@ -62,6 +63,7 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			os.Exit(1)
 		}
 	}
+	cache := pids.InitPidCache()
 	soPath := pids.GetSoPaths()
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range soPath {
@@ -80,5 +82,5 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	}
 	defer rd.Close()
 
-	return memtrace.Run(ctx, rd, cfg)
+	return memtrace.Run(ctx, rd, cfg, cache)
 }

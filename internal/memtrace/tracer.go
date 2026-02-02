@@ -8,8 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal"
+	"github.com/vuvietnguyenit/gpuxray/internal/event"
+	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
 type Tracer struct {
@@ -24,12 +30,14 @@ func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
 	return ringbuf.NewReader(objs.MemleakRingbufEvents)
 }
 
-func (t *Tracer) Run(ctx context.Context) error {
+func (t *Tracer) Run(ctx context.Context, cache *pid.PIDCache) error {
 	go func() {
 		<-ctx.Done()
 		t.rd.Close()
 		fmt.Println("mem trace stopped")
 	}()
+	aggregator := NewLeakAggregator()
+	go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -50,8 +58,150 @@ func (t *Tracer) Run(ctx context.Context) error {
 				log.Printf("decode error: %v", err)
 				continue
 			}
+			inspector := cache.GetOrInspect(
+				ev.Process.Process.PID,
+				func(p uint32) (pid.PIDInspection, error) {
+					return pid.InspectPID(int32(p)), nil
+				},
+			)
 
-			log.Printf("Memory Event: %+v", ev)
+			aggregator.Consume(ev, inspector)
+
+		}
+	}
+}
+
+// Detect memory leaks based on allocation and free events
+type LeakKey struct {
+	PID         uint32
+	TID         int
+	DeviceIndex int
+	UUID        string
+}
+
+type MemoryLeakResult struct {
+	Key        LeakKey
+	Process    pid.USProcessInfo
+	AllocBytes uint64
+	FreeBytes  uint64
+	Leaked     uint64
+	AllocCount uint64
+	FreeCount  uint64
+}
+
+type LeakAggregator struct {
+	mu    sync.Mutex
+	state map[LeakKey]*MemoryLeakResult
+}
+
+func NewLeakAggregator() *LeakAggregator {
+	return &LeakAggregator{
+		state: make(map[LeakKey]*MemoryLeakResult),
+	}
+}
+
+func (a *LeakAggregator) Consume(
+	ev event.MemoryEvent,
+	inspection pid.PIDInspection,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	for _, gpu := range inspection.GPUs {
+		key := LeakKey{
+			PID:         ev.Process.Process.PID,
+			TID:         ev.TID,
+			DeviceIndex: gpu.DeviceIndex,
+			UUID:        gpu.UUID,
+		}
+
+		entry, ok := a.state[key]
+		if !ok {
+			entry = &MemoryLeakResult{
+				Key:     key,
+				Process: ev.Process.Process,
+			}
+			a.state[key] = entry
+		}
+
+		switch ev.Op {
+		case event.MemAlloc:
+			entry.AllocBytes += ev.Bytes
+			entry.AllocCount++
+
+		case event.MemFree:
+			entry.FreeBytes += ev.Bytes
+			entry.FreeCount++
+		}
+	}
+}
+
+// Use this function whatever want to show the result of memory leak aggregation
+func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	out := make([]MemoryLeakResult, 0, len(a.state))
+	for _, v := range a.state {
+		leaked := uint64(0)
+		if v.AllocBytes > v.FreeBytes {
+			leaked = v.AllocBytes - v.FreeBytes
+		}
+
+		out = append(out, MemoryLeakResult{
+			Key:        v.Key,
+			Process:    v.Process,
+			AllocBytes: v.AllocBytes,
+			FreeBytes:  v.FreeBytes,
+			Leaked:     leaked,
+			AllocCount: v.AllocCount,
+			FreeCount:  v.FreeCount,
+		})
+	}
+	return out
+}
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
+}
+
+func printSnapshot(results []MemoryLeakResult) {
+	clearScreen()
+
+	fmt.Println("GPU Memory Leak Monitor")
+	fmt.Println("Press Ctrl+C to exit")
+	fmt.Println(time.Now().Format(time.RFC3339))
+	fmt.Println(strings.Repeat("-", 80))
+
+	for _, r := range results {
+		fmt.Printf(
+			"PID=%-6d COMM=%-16s TID=%-6d GPU=%d %-18s "+
+				"LEAK=%-10s\n",
+			r.Key.PID,
+			internal.Truncate(r.Process.Comm, 16),
+			r.Key.TID,
+			r.Key.DeviceIndex,
+			r.Key.UUID,
+			internal.HumanBytes(r.Leaked),
+		)
+	}
+
+}
+
+func StartSnapshotPrinter(
+	ctx context.Context,
+	agg *LeakAggregator,
+	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			printSnapshot(agg.Snapshot())
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
 type Config struct {
@@ -14,7 +15,7 @@ type Config struct {
 	DeviceID int
 }
 
-func Run(ctx context.Context, rd *ringbuf.Reader, cfg Config) error {
+func Run(ctx context.Context, rd *ringbuf.Reader, cfg Config, cache *pid.PIDCache) error {
 	tracer := NewTracer(rd)
-	return tracer.Run(ctx)
+	return tracer.Run(ctx, cache)
 }
