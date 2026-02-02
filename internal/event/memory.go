@@ -3,7 +3,11 @@
 
 package event
 
-import "time"
+import (
+	"time"
+
+	"github.com/vuvietnguyenit/gpuxray/internal/pid"
+)
 
 type MemoryEventType uint8
 
@@ -22,15 +26,13 @@ const (
 )
 
 type MemoryEvent struct {
-	TS     time.Time
-	Device int
-	PID    int
-	TID    int
-	Bytes  uint64
-	Ptr    uint64
-	Op     MemoryEventType
+	TS      time.Time
+	Process pid.PIDInspection
+	TID     int
+	Bytes   uint64
+	Ptr     uint64
+	Op      MemoryEventType
 }
 
 func (e MemoryEvent) Type() Type           { return EventMemory }
 func (e MemoryEvent) Timestamp() time.Time { return e.TS }
-func (e MemoryEvent) DeviceID() int        { return e.Device }

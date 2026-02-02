@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
+	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
 // match C bpf struct
@@ -27,12 +28,11 @@ func decodeMemoryEvent(data []byte) (event.MemoryEvent, error) {
 		return event.MemoryEvent{}, err
 	}
 	return event.MemoryEvent{
-		TS: time.Unix(0, int64(raw.Timestamp)),
-		// Device: int(raw.DeviceID),
-		PID:   int(raw.Pid),
-		TID:   int(raw.Tid),
-		Bytes: raw.Size,
-		Ptr:   raw.DevicePtr,
-		Op:    event.MemoryEventType(raw.Type),
+		TS:      time.Unix(0, int64(raw.Timestamp)),
+		Process: pid.InspectPID(int32(raw.Pid)),
+		TID:     int(raw.Tid),
+		Bytes:   raw.Size,
+		Ptr:     raw.DevicePtr,
+		Op:      event.MemoryEventType(raw.Type),
 	}, nil
 }
