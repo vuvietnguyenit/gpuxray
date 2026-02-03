@@ -209,12 +209,11 @@ func (pi ListPIDInspection) EnumerateSymNames(prefix string) []string {
 	return internal.Deduplicate(result)
 }
 
-func (pi ListPIDInspection) InitPidCache() *PIDCache {
-	cache := NewPIDCache()
+func (pi ListPIDInspection) CachePID() {
+	cache := Global()
 	for _, proc := range pi {
 		cache.Set(proc.Process.PID, proc)
 	}
-	return cache
 }
 
 // Function to enumerate exported APIs from a process's CUDA shared libraries, can provide a prefix

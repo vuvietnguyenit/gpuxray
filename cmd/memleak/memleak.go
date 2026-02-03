@@ -63,7 +63,7 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			os.Exit(1)
 		}
 	}
-	cache := pids.InitPidCache()
+	pids.CachePID()
 	soPath := pids.GetSoPaths()
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range soPath {
@@ -81,6 +81,5 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer rd.Close()
-
-	return memtrace.Run(ctx, rd, cfg, cache)
+	return memtrace.Run(ctx, rd, cfg)
 }
