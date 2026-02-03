@@ -9,7 +9,12 @@ import (
 type Config struct {
 }
 
-func Run(ctx context.Context, rd *ringbuf.Reader, cfg Config) error {
-	tracer := NewTracer(rd)
+func RunProcExitRd(ctx context.Context, rd *ringbuf.Reader, cfg Config) error {
+	tracer := NewProcExitTracer(rd)
+	return tracer.Run(ctx)
+}
+
+func RunCuInitRd(ctx context.Context, rd *ringbuf.Reader, cfg Config) error {
+	tracer := NewCuInitTracer(rd)
 	return tracer.Run(ctx)
 }

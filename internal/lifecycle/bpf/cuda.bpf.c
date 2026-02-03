@@ -14,7 +14,7 @@ struct cuinit_event {
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24); // 16MB
-} events SEC(".maps");
+} cu_init_events SEC(".maps");
 
 /*
  * Fires when a process calls cuInit()
@@ -25,7 +25,7 @@ int uprobe_cuinit(struct pt_regs *ctx)
     struct cuinit_event *ev;
     __u64 pid_tgid;
 
-    ev = bpf_ringbuf_reserve(&events, sizeof(*ev), 0);
+    ev = bpf_ringbuf_reserve(&cu_init_events, sizeof(*ev), 0);
     if (!ev)
         return 0;
 

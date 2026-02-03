@@ -3,26 +3,40 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
-type Tracer struct {
-	rd       *ringbuf.Reader
+type ProcExitTracer struct {
+	procExitRd *ringbuf.Reader
+	pidCache   *pid.PIDCache
+}
+
+type CuInitTracer struct {
+	cuInitRd *ringbuf.Reader
 	pidCache *pid.PIDCache
 }
 
-func NewTracer(rd *ringbuf.Reader) *Tracer {
-	return &Tracer{rd: rd, pidCache: pid.GlobalPIDCache()}
+func NewProcExitTracer(procExitRd *ringbuf.Reader) *ProcExitTracer {
+	return &ProcExitTracer{procExitRd: procExitRd, pidCache: pid.GlobalPIDCache()}
 }
 
-func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
+func NewCuInitTracer(cuInitRd *ringbuf.Reader) *CuInitTracer {
+	return &CuInitTracer{cuInitRd: cuInitRd, pidCache: pid.GlobalPIDCache()}
+}
+
+func NewRingbufReader(objs *ProcExitObjects) (*ringbuf.Reader, error) {
 	return ringbuf.NewReader(objs.LifecycleEvents)
 }
 
-func (r *Tracer) Run(ctx context.Context) error {
-	defer r.rd.Close()
+func NewCuInitRingbufReader(objs *CuInitObjects) (*ringbuf.Reader, error) {
+	return ringbuf.NewReader(objs.CuInitEvents)
+}
+
+func (r *ProcExitTracer) Run(ctx context.Context) error {
+	defer r.procExitRd.Close()
 
 	for {
 		select {
@@ -31,7 +45,7 @@ func (r *Tracer) Run(ctx context.Context) error {
 		default:
 		}
 
-		record, err := r.rd.Read()
+		record, err := r.procExitRd.Read()
 		if err != nil {
 			if errors.Is(err, ringbuf.ErrClosed) {
 				return nil
@@ -43,5 +57,30 @@ func (r *Tracer) Run(ctx context.Context) error {
 			continue
 		}
 		r.pidCache.Delete(ev.Pid)
+	}
+}
+
+func (r *CuInitTracer) Run(ctx context.Context) error {
+	defer r.cuInitRd.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		record, err := r.cuInitRd.Read()
+		if err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				return nil
+			}
+			continue
+		}
+		ev, err := decodeCuInitEvent(record.RawSample)
+		if err != nil {
+			continue
+		}
+		fmt.Printf("cuInit called by PID %d\n", ev.PID)
 	}
 }

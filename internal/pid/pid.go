@@ -141,7 +141,7 @@ func InspectPID(pid int32) PIDInspection {
 }
 
 // GetRunningProcesses returns all PIDs using CUDA
-func GetRunningProcesses() ([]PIDInspection, error) {
+func GetRunningProcesses() (ListPIDInspection, error) {
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("nvml init failed: %s", nvml.ErrorString(ret))
