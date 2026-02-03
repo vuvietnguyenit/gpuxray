@@ -183,18 +183,6 @@ func GetRunningProcesses() ([]PIDInspection, error) {
 
 type ListPIDInspection []PIDInspection
 
-// Function to scan all shared object paths from a list of PIDInspection
-func (pi ListPIDInspection) GetSoPaths() []string {
-	var sharedObjectPaths []string
-	for _, proc := range pi {
-		for _, lib := range proc.Process.CUDALibs {
-			sharedObjectPaths = append(sharedObjectPaths, lib)
-		}
-	}
-	sharedObjectPaths = internal.FilterValidCUDASharedObjects(sharedObjectPaths)
-	return sharedObjectPaths
-}
-
 func (pi ListPIDInspection) EnumerateSymNames(prefix string) []string {
 	var result []string
 	for _, proc := range pi {
@@ -210,7 +198,7 @@ func (pi ListPIDInspection) EnumerateSymNames(prefix string) []string {
 }
 
 func (pi ListPIDInspection) CachePID() {
-	cache := Global()
+	cache := GlobalPIDCache()
 	for _, proc := range pi {
 		cache.Set(proc.Process.PID, proc)
 	}

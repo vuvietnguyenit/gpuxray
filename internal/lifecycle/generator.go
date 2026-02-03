@@ -4,3 +4,4 @@
 package lifecycle
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -output-dir gen -go-package gen ProcessExit ./bpf/process_exit.bpf.c -- -I../../bpf/headers -D__TARGET_ARCH_x86
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -output-dir gen -go-package gen Cuda ./bpf/cuda.bpf.c -- -I../../bpf/headers -D__TARGET_ARCH_x86

@@ -9,6 +9,7 @@ import (
 
 type Objects struct {
 	*gen.ProcessExitObjects
+	*gen.CudaObjects
 	Tp link.Link
 }
 
@@ -17,17 +18,29 @@ func LoadObjects(cfg Config) (*Objects, error) {
 	if err := gen.LoadProcessExitObjects(&objs, nil); err != nil {
 		return nil, err
 	}
-	return &Objects{&objs, nil}, nil
+	var cudaObjs gen.CudaObjects
+	if err := gen.LoadCudaObjects(&cudaObjs, nil); err != nil {
+		return nil, err
+	}
+	return &Objects{&objs, &cudaObjs, nil}, nil
 }
 
 func (o *Objects) Close() error {
 	if o.Tp != nil {
 		o.Tp.Close()
 	}
-	return o.ProcessExitObjects.Close()
+	err := o.CudaObjects.Close()
+	if err != nil {
+		return err
+	}
+	err = o.ProcessExitObjects.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (o *Objects) Attach(cfg Config) error {
+func (o *Objects) AttachTp(cfg Config) error {
 	tp, err := link.Tracepoint(
 		"sched",
 		"sched_process_exit",

@@ -66,7 +66,7 @@ func startLifecycle(ctx context.Context) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := loader.Attach(cfg); err != nil {
+	if err := loader.AttachTp(cfg); err != nil {
 		log.Fatal(err)
 	}
 

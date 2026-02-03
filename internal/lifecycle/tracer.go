@@ -14,7 +14,7 @@ type Tracer struct {
 }
 
 func NewTracer(rd *ringbuf.Reader) *Tracer {
-	return &Tracer{rd: rd, pidCache: pid.Global()}
+	return &Tracer{rd: rd, pidCache: pid.GlobalPIDCache()}
 }
 
 func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {

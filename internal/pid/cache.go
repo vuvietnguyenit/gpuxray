@@ -1,7 +1,11 @@
 // simplified just create a map and store inspections on it witk key as pid
 package pid
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/vuvietnguyenit/gpuxray/internal"
+)
 
 type PIDCache struct {
 	mu    sync.RWMutex
@@ -70,4 +74,27 @@ func (c *PIDCache) Reset() {
 	defer c.mu.Unlock()
 
 	c.cache = make(map[uint32]PIDInspection)
+}
+
+func (c *PIDCache) GetCUDASharedObjectPaths() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	seen := make(map[string]struct{})
+
+	for _, insp := range c.cache {
+		for _, lib := range insp.Process.CUDALibs {
+			if lib == "" {
+				continue
+			}
+			seen[lib] = struct{}{}
+		}
+	}
+
+	out := make([]string, 0, len(seen))
+	for lib := range seen {
+		out = append(out, lib)
+	}
+	out = internal.FilterValidCUDASharedObjects(out)
+	return out
 }
