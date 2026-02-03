@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/cilium/ebpf/rlimit"
@@ -64,21 +66,34 @@ func startLifecycle(ctx context.Context) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := loader.Attach(cfg); err != nil {
+		log.Fatal(err)
+	}
 
 	reader, err := lifecycle.NewRingbufReader(loader)
 	if err != nil {
 		loader.Close()
 		return nil, err
 	}
-	go lifecycle.Run(ctx, reader, cfg)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		lifecycle.Run(ctx, reader, cfg)
+	}()
+
+	// cleanup function
 	return func() {
+		<-done
 		loader.Close()
 	}, nil
 }
-
 func Execute() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
 	cleanupLifecycle, err := startLifecycle(ctx)
 	if err != nil {

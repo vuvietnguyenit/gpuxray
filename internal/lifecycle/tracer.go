@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
@@ -43,7 +42,6 @@ func (r *Tracer) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		fmt.Println(ev)
-		// pidCache.Remove(int(ev.Pid))
+		r.pidCache.Delete(ev.Pid)
 	}
 }
