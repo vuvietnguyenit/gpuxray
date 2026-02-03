@@ -6,14 +6,16 @@ import (
 	"fmt"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
 type Tracer struct {
-	rd *ringbuf.Reader
+	rd       *ringbuf.Reader
+	pidCache *pid.PIDCache
 }
 
 func NewTracer(rd *ringbuf.Reader) *Tracer {
-	return &Tracer{rd: rd}
+	return &Tracer{rd: rd, pidCache: pid.Global()}
 }
 
 func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {

@@ -17,5 +17,5 @@ type Config struct {
 
 func Run(ctx context.Context, rd *ringbuf.Reader, cfg Config, cache *pid.PIDCache) error {
 	tracer := NewTracer(rd)
-	return tracer.Run(ctx, cache)
+	return tracer.Run(ctx)
 }

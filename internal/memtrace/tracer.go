@@ -19,18 +19,19 @@ import (
 )
 
 type Tracer struct {
-	rd *ringbuf.Reader
+	rd       *ringbuf.Reader
+	pidCache *pid.PIDCache
 }
 
 func NewTracer(rd *ringbuf.Reader) *Tracer {
-	return &Tracer{rd: rd}
+	return &Tracer{rd: rd, pidCache: pid.Global()}
 }
 
 func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
 	return ringbuf.NewReader(objs.MemleakRingbufEvents)
 }
 
-func (t *Tracer) Run(ctx context.Context, cache *pid.PIDCache) error {
+func (t *Tracer) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		t.rd.Close()
@@ -58,7 +59,7 @@ func (t *Tracer) Run(ctx context.Context, cache *pid.PIDCache) error {
 				log.Printf("decode error: %v", err)
 				continue
 			}
-			inspector := cache.GetOrInspect(
+			inspector := t.pidCache.GetOrInspect(
 				ev.Process.Process.PID,
 				func(p uint32) (pid.PIDInspection, error) {
 					return pid.InspectPID(int32(p)), nil
