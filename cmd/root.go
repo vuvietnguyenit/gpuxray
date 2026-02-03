@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vuvietnguyenit/gpuxray/cmd/memleak"
 	"github.com/vuvietnguyenit/gpuxray/internal"
+	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 )
 
 func removeMemlock() error {
@@ -55,7 +57,35 @@ func init() {
 	rootCmd.AddCommand(memleak.NewCmd())
 }
 
+func startLifecycle(ctx context.Context) (func(), error) {
+	fmt.Println("Starting lifecycle tracer...")
+	cfg := lifecycle.Config{} // if you have any config, set it here
+	loader, err := lifecycle.LoadObjects(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := lifecycle.NewRingbufReader(loader)
+	if err != nil {
+		loader.Close()
+		return nil, err
+	}
+	go lifecycle.Run(ctx, reader, cfg)
+	return func() {
+		loader.Close()
+	}, nil
+}
+
 func Execute() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cleanupLifecycle, err := startLifecycle(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cleanupLifecycle()
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
