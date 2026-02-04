@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -162,31 +161,30 @@ func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
 	return out
 }
 
-func clearScreen() {
-	fmt.Print("\033[H\033[2J")
+func PrintHeader() {
+	fmt.Printf(
+		"%-10s %-8s %-4s %-12s %-8s %-8s %-16s\n",
+		"TIME",
+		"PID",
+		"GPU",
+		"ALLOC_MB",
+		"AL_CNT",
+		"FR_CNT",
+		"COMM",
+	)
 }
 
-func printSnapshot(results []MemoryLeakResult) {
-	clearScreen()
-
-	fmt.Println("GPU Memory Leak Monitor")
-	fmt.Println("Press Ctrl+C to exit")
-	fmt.Println(time.Now().Format(time.RFC3339))
-	fmt.Println(strings.Repeat("-", 80))
-
-	for _, r := range results {
-		fmt.Printf(
-			"PID=%-6d COMM=%-16s TID=%-6d GPU=%d %-18s "+
-				"LEAK=%-10s\n",
-			r.Key.PID,
-			internal.Truncate(r.Process.Comm, 16),
-			r.Key.TID,
-			r.Key.DeviceIndex,
-			r.Key.UUID,
-			internal.HumanBytes(r.Leaked),
-		)
-	}
-
+func PrintLeakStat(ts time.Time, r MemoryLeakResult) {
+	fmt.Printf(
+		"%-10s %-8d %-4d %-12s %-8d %-8d %-16s\n",
+		ts.Format("15:04:05"),
+		r.Key.PID,
+		r.Key.DeviceIndex,
+		internal.HumanBytes(r.Leaked),
+		r.AllocCount,
+		r.FreeCount,
+		internal.Truncate(r.Process.Comm, 16),
+	)
 }
 
 func StartSnapshotPrinter(
@@ -196,13 +194,19 @@ func StartSnapshotPrinter(
 ) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	PrintHeader()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-ticker.C:
-			printSnapshot(agg.Snapshot())
+			ts := time.Now()
+			results := agg.Snapshot()
+
+			for _, r := range results {
+				PrintLeakStat(ts, r)
+			}
 		}
 	}
 }

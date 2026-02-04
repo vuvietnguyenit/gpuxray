@@ -51,7 +51,6 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer objs.Close()
-	// TODO: In the future, we need to do something to make interval update result in screen
 	var pids pid.ListPIDInspection
 	if Pid != 0 {
 		process := pid.InspectPID(int32(Pid))
