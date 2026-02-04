@@ -17,6 +17,7 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/cmd/memleak"
 	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 	"github.com/vuvietnguyenit/gpuxray/internal/so"
 )
@@ -29,8 +30,15 @@ func removeMemlock() error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("failed to remove memlock limit: %w", err)
 	}
-	log.Println("Removed memlock limit successfully")
+	logging.L().Debug().Msg("removed memlock limit successfully")
 	return nil
+}
+
+func initLogger() {
+	logging.Init(logging.Config{
+		Level:  internal.LogLevel,
+		Format: internal.LogFormat, // auto | json | console
+	})
 }
 
 var rootCmd = &cobra.Command{
@@ -43,7 +51,7 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("Unable to initialize NVML: %v", nvml.ErrorString(ret))
 			os.Exit(1)
 		}
-		log.Println("Initialized NVML")
+		logging.L().Debug().Msg("initialized NVML")
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		ret := nvml.Shutdown()
@@ -51,7 +59,7 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
 			os.Exit(1)
 		}
-		log.Println("Shutdown NVML")
+		logging.L().Debug().Msg("Shutdown NVML")
 	},
 }
 
@@ -59,11 +67,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&internal.RemoveMemlock, "remove-memlock", true, "Remove RLIMIT_MEMLOCK before loading eBPF programs")
 	rootCmd.PersistentFlags().IntVarP(&internal.FetchInterval, "fetch-interval", "i", 5, "Interval in seconds to fetch GPU tracing console")
 	rootCmd.PersistentFlags().StringVarP(&internal.CudaSo, "cuda-so", "c", "/usr/lib/x86_64-linux-gnu/libcuda.so", "Path to CUDA shared object")
+	rootCmd.PersistentFlags().StringVarP(&internal.LogFormat, "log-format", "l", "console", "The format of log, it can be auto | json | console")
+	rootCmd.PersistentFlags().StringVarP(&internal.LogLevel, "log-level", "v", "info", "Log level")
+	initLogger()
 	rootCmd.AddCommand(memleak.NewCmd())
 }
 
 func startLifecycle(parent context.Context) (func(), error) {
-	fmt.Println("Starting lifecycle tracer...")
+	logging.L().Debug().Msg("Starting lifecycle tracer...")
 
 	ctx, cancel := context.WithCancel(parent)
 
@@ -100,8 +111,7 @@ func startLifecycle(parent context.Context) (func(), error) {
 }
 
 func startCuInitTracer(parent context.Context) (func(), error) {
-	fmt.Println("Starting cuInit tracer...")
-
+	logging.L().Debug().Msg("Starting cuInit tracer...")
 	ctx, cancel := context.WithCancel(parent)
 
 	cfg := lifecycle.Config{}
@@ -165,10 +175,6 @@ func Execute() {
 	pids, err := pid.GetRunningProcesses()
 	if err != nil {
 		log.Fatal(err)
-	}
-	if len(pids) == 0 {
-		log.Println("No GPU processes found.")
-		return
 	}
 	pids.CachePID() // cache the PID info into map
 	// c := pid.GlobalPIDCache() get global cache instance

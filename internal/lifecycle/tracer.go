@@ -3,9 +3,9 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
@@ -81,6 +81,9 @@ func (r *CuInitTracer) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		fmt.Printf("cuInit called by PID %d\n", ev.PID)
+		logging.L().Debug().
+			Int("pid", int(ev.PID)).
+			Msg("cuInit called")
+
 	}
 }

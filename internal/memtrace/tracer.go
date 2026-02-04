@@ -7,13 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
@@ -34,7 +34,9 @@ func (t *Tracer) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		t.rd.Close()
-		fmt.Println("mem trace stopped")
+		logging.L().Debug().
+			Msg("mem trace stopped")
+
 	}()
 	aggregator := NewLeakAggregator()
 	go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
@@ -49,13 +51,17 @@ func (t *Tracer) Run(ctx context.Context) error {
 				if errors.Is(err, ringbuf.ErrClosed) {
 					return nil
 				}
-				log.Printf("ringbuf read error: %v", err)
+				logging.L().Error().
+					Err(err).
+					Msg("ringbuf read failed")
 				continue
 			}
 
 			ev, err := decodeMemoryEvent(record.RawSample)
 			if err != nil {
-				log.Printf("decode error: %v", err)
+				logging.L().Error().
+					Err(err).
+					Msg("event decode failed")
 				continue
 			}
 			inspector := t.pidCache.GetOrInspect(

@@ -2,11 +2,11 @@ package lifecycle
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle/gen"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 )
 
 type ProcExitObjects struct {
@@ -92,21 +92,21 @@ func (o *CuInitObjects) Attach(cudaLib string, objs *CuInitObjects) ([]link.Link
 			} else {
 				l, err = ex.Uprobe(sym, prog, nil)
 			}
-
+			probeType := map[bool]string{true: "uret", false: "u"}[ret]
 			if err != nil {
-				log.Printf("failed to attach %sprobe to %s: %v",
-					map[bool]string{true: "uret", false: "u"}[ret],
-					sym,
-					err,
-				)
+				logging.L().Warn().
+					Str("probe", probeType).
+					Str("symbol", sym).
+					Err(err).
+					Msg("failed to attach probe")
 				continue
 			}
 
 			links = append(links, l)
-			log.Printf("✓ attached %sprobe to %s",
-				map[bool]string{true: "uret", false: "u"}[ret],
-				sym,
-			)
+			logging.L().Debug().
+				Str("probe", probeType).
+				Str("symbol", sym).
+				Msg("attached probe")
 		}
 	}
 

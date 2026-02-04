@@ -7,13 +7,13 @@ package pid
 import (
 	"debug/elf"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/vuvietnguyenit/gpuxray/internal"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 )
 
 func getCUDASharedObject(pid int) ([]string, error) {
@@ -64,14 +64,22 @@ type ListProcess []USProcessInfo
 func inspectProc(pid uint32) (USProcessInfo, error) {
 	p, err := process.NewProcess(int32(pid))
 	if err != nil {
-		log.Printf("Failed to get process info for PID %d: %v", p.Pid, err)
+		logging.L().Error().
+			Int("pid", int(p.Pid)).
+			Err(err).
+			Msg("failed to get process info")
+
 		return USProcessInfo{}, err
 	}
 	comm, _ := p.Name()
 	args, _ := p.Cmdline()
 	cudaLibs, err := getCUDASharedObject(int(pid))
 	if err != nil {
-		log.Printf("Failed to get CUDA shared objects for PID %d: %v", p.Pid, err)
+		logging.L().Error().
+			Int("pid", int(p.Pid)).
+			Err(err).
+			Msg("failed to get CUDA shared objects")
+
 		return USProcessInfo{}, err
 	}
 	return USProcessInfo{
@@ -158,13 +166,22 @@ func GetRunningProcesses() (ListPIDInspection, error) {
 	for i := range count {
 		dev, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
-			log.Printf("DeviceGetHandleByIndex(%d): %s", i, nvml.ErrorString(ret))
+			logging.L().Error().
+				Int("device_index", i).
+				Int("nvml_ret", int(ret)).
+				Str("nvml_error", nvml.ErrorString(ret)).
+				Msg("nvml DeviceGetHandleByIndex failed")
+
 			continue
 		}
 
 		procs, ret := dev.GetComputeRunningProcesses()
 		if ret != nvml.SUCCESS {
-			log.Printf("GetComputeRunningProcesses: %s", nvml.ErrorString(ret))
+			logging.L().Error().
+				Int("nvml_ret", int(ret)).
+				Str("nvml_error", nvml.ErrorString(ret)).
+				Msg("nvml GetComputeRunningProcesses failed")
+
 			continue
 		}
 

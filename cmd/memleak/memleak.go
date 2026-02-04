@@ -5,13 +5,12 @@ package memleak
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
@@ -58,14 +57,17 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	} else {
 		pids, err = pid.GetRunningProcesses()
 		if err != nil {
-			log.Printf("Failed to get running GPU processes: %v", err)
+			logging.L().Err(err).Msg("Failed to get running GPU processes")
 			os.Exit(1)
 		}
 	}
 	pids.CachePID()
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range pid.GlobalPIDCache().GetCUDASharedObjectPaths() {
-		fmt.Printf("Attaching probes to CUDA library: %s\n", libPath)
+		logging.L().Debug().
+			Str("cuda_lib", libPath).
+			Msg("attaching probes to CUDA library")
+
 		links := memtrace.AttachProbes(libPath, objs, syms)
 		defer func() {
 			for _, l := range links {

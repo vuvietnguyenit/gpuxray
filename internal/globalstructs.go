@@ -11,3 +11,5 @@ var MemoryleakFlags MemleakFlags
 var RemoveMemlock bool
 var FetchInterval int
 var CudaSo string
+var LogLevel string
+var LogFormat string
