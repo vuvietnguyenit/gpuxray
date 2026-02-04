@@ -62,19 +62,25 @@ func init() {
 	rootCmd.AddCommand(memleak.NewCmd())
 }
 
-func startLifecycle(ctx context.Context) (func(), error) {
+func startLifecycle(parent context.Context) (func(), error) {
 	fmt.Println("Starting lifecycle tracer...")
+
+	ctx, cancel := context.WithCancel(parent)
+
 	cfg := lifecycle.Config{} // if you have any config, set it here
 	loader, err := lifecycle.LoadProcExitObjects(cfg)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	if err := loader.Attach(cfg); err != nil {
+		cancel()
 		log.Fatal(err)
 	}
 
 	reader, err := lifecycle.NewRingbufReader(loader)
 	if err != nil {
+		cancel()
 		loader.Close()
 		return nil, err
 	}
@@ -86,40 +92,57 @@ func startLifecycle(ctx context.Context) (func(), error) {
 
 	// cleanup function
 	return func() {
+		cancel()
+		reader.Close()
 		<-done
 		loader.Close()
 	}, nil
 }
 
-func startCuInitTracer(ctx context.Context) (func(), error) {
+func startCuInitTracer(parent context.Context) (func(), error) {
 	fmt.Println("Starting cuInit tracer...")
-	cfg := lifecycle.Config{} // if you have any config, set it here
+
+	ctx, cancel := context.WithCancel(parent)
+
+	cfg := lifecycle.Config{}
 	loader, err := lifecycle.LoadCuInitObjects(cfg)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
+
 	links, err := loader.Attach(internal.CudaSo, loader)
 	if err != nil {
-		log.Fatal(err)
+		cancel()
+		loader.Close()
+		return nil, err
 	}
 
 	reader, err := lifecycle.NewCuInitRingbufReader(loader)
 	if err != nil {
+		cancel()
+		for _, l := range links {
+			l.Close()
+		}
 		loader.Close()
 		return nil, err
 	}
+
 	done := make(chan struct{})
+
 	go func() {
 		defer close(done)
 		lifecycle.RunCuInitRd(ctx, reader, cfg)
 	}()
 
-	// cleanup function
+	// cleanup
 	return func() {
-		<-done
+		cancel()
+		reader.Close()
 		for _, link := range links {
 			link.Close()
 		}
+		<-done
 		loader.Close()
 	}, nil
 }
