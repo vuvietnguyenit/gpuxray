@@ -12,6 +12,8 @@
             "program": "${workspaceFolder}/main.go",
             "preLaunchTask": "make: build",
             "args": [
+                "-i", "1",
+                "-v", "debug",
                 "memtrace",
             ]
         },

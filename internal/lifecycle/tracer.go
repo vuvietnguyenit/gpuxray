@@ -56,6 +56,7 @@ func (r *ProcExitTracer) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
+		logging.L().Debug().Uint32("pid", ev.Pid).Msg("pid is existed")
 		r.pidCache.Delete(ev.Pid)
 	}
 }

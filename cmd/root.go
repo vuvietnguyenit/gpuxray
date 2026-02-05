@@ -14,7 +14,6 @@ import (
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
-	"github.com/vuvietnguyenit/gpuxray/cmd/memleak"
 	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
@@ -34,17 +33,17 @@ func removeMemlock() error {
 	return nil
 }
 
-func initLogger() {
-	logging.Init(logging.Config{
-		Level:  internal.LogLevel,
-		Format: internal.LogFormat, // auto | json | console
-	})
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "gpuxray",
 	Short: "eBPF tool this help tracing and investigating GPU",
+
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+
+		// init logging profile
+		logging.Init(logging.Config{
+			Level:  internal.LogLevel,
+			Format: internal.LogFormat, // auto | json | console
+		})
 		removeMemlock()
 		ret := nvml.Init()
 		if ret != nvml.SUCCESS {
@@ -52,6 +51,39 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		logging.L().Debug().Msg("initialized NVML")
+		ctx, stop := signal.NotifyContext(
+			context.Background(),
+			os.Interrupt,
+			syscall.SIGTERM,
+		)
+		defer stop()
+		// Thread 1: Start lifecycle tracer
+		cleanupLifecycle, err := startLifecycle(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer cleanupLifecycle()
+
+		// Thread 2: get current GPU procs are running, get all .so and syms
+		pids, err := pid.GetRunningProcesses()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(pids) != 0 {
+			pids.CachePID() // cache the PID info into map
+		}
+		// c := pid.GlobalPIDCache() get global cache instance
+
+		err = so.InitFromSharedObject(internal.CudaSo)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Thread 3: Observe cuInit events
+		cleanupCuInit, err := startCuInitTracer(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer cleanupCuInit()
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		ret := nvml.Shutdown()
@@ -69,11 +101,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&internal.CudaSo, "cuda-so", "c", "/usr/lib/x86_64-linux-gnu/libcuda.so", "Path to CUDA shared object")
 	rootCmd.PersistentFlags().StringVarP(&internal.LogFormat, "log-format", "l", "console", "The format of log, it can be auto | json | console")
 	rootCmd.PersistentFlags().StringVarP(&internal.LogLevel, "log-level", "v", "info", "Log level")
-	initLogger()
-	rootCmd.AddCommand(memleak.NewCmd())
 }
 
 func startLifecycle(parent context.Context) (func(), error) {
+
 	logging.L().Debug().Msg("Starting lifecycle tracer...")
 
 	ctx, cancel := context.WithCancel(parent)
@@ -157,38 +188,6 @@ func startCuInitTracer(parent context.Context) (func(), error) {
 	}, nil
 }
 func Execute() {
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer stop()
-
-	// Thread 1: Start lifecycle tracer
-	cleanupLifecycle, err := startLifecycle(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cleanupLifecycle()
-
-	// Thread 2: get current GPU procs are running, get all .so and syms
-	pids, err := pid.GetRunningProcesses()
-	if err != nil {
-		log.Fatal(err)
-	}
-	pids.CachePID() // cache the PID info into map
-	// c := pid.GlobalPIDCache() get global cache instance
-
-	err = so.InitFromSharedObject(internal.CudaSo)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Thread 3: Observe cuInit events
-	cleanupCuInit, err := startCuInitTracer(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cleanupCuInit()
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

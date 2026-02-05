@@ -1,7 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2026 Vu Nguyen
-
-package memleak
+package cmd
 
 import (
 	"context"
@@ -32,6 +29,10 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().IntVar(&DeviceID, "device", -1, "GPU device ID (-1 = all)")
 
 	return cmd
+}
+
+func init() {
+	rootCmd.AddCommand(NewCmd())
 }
 
 func runMemtrace(cmd *cobra.Command, _ []string) error {
