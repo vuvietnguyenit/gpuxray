@@ -2,14 +2,16 @@ package cmd
 
 import (
 	"context"
+	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/internal"
+	"github.com/vuvietnguyenit/gpuxray/internal/daemon"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
+	"github.com/vuvietnguyenit/gpuxray/internal/so"
 )
 
 var (
@@ -36,11 +38,7 @@ func init() {
 }
 
 func runMemtrace(cmd *cobra.Command, _ []string) error {
-	ctx, cancel := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
+	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 	cfg := memtrace.Config{
 		PID:      Pid,
@@ -50,6 +48,14 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// DEBUG purpose
+	go func() {
+		<-ctx.Done()
+		logging.L().Debug().
+			Err(ctx.Err()).
+			Msg("memtrace context canceled")
+
+	}()
 	defer objs.Close()
 	var pids pid.ListPIDInspection
 	if Pid != 0 {
@@ -62,7 +68,13 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			os.Exit(1)
 		}
 	}
-	pids.CachePID()
+	if len(pids) != 0 {
+		pids.CachePID()
+	}
+	err = so.InitFromSharedObject(internal.CudaSo)
+	if err != nil {
+		log.Fatal(err)
+	}
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range pid.GlobalPIDCache().GetCUDASharedObjectPaths() {
 		logging.L().Debug().
@@ -76,11 +88,17 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			}
 		}()
 	}
-
+	// NOTE: You need to load daemon after initial done everything that is related to BPF initial
+	d, err := daemon.Start(ctx)
+	if err != nil {
+		return err
+	}
+	defer d.Stop()
 	rd, err := memtrace.NewRingbufReader(objs)
 	if err != nil {
 		return err
 	}
 	defer rd.Close()
+
 	return memtrace.Run(ctx, rd, cfg)
 }

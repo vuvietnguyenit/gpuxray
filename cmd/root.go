@@ -15,10 +15,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
 	"github.com/vuvietnguyenit/gpuxray/internal"
-	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
-	"github.com/vuvietnguyenit/gpuxray/internal/pid"
-	"github.com/vuvietnguyenit/gpuxray/internal/so"
 )
 
 func removeMemlock() error {
@@ -38,7 +35,19 @@ var rootCmd = &cobra.Command{
 	Short: "eBPF tool this help tracing and investigating GPU",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		rootCtx, rootCancel = signal.NotifyContext(
+			context.Background(),
+			os.Interrupt,
+			syscall.SIGTERM,
+		)
+		// DEBUG purpose
+		go func() {
+			<-rootCtx.Done()
+			logging.L().Debug().
+				Err(rootCtx.Err()).
+				Msg("rootCmd context canceled")
 
+		}()
 		// init logging profile
 		logging.Init(logging.Config{
 			Level:  internal.LogLevel,
@@ -51,41 +60,11 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		logging.L().Debug().Msg("initialized NVML")
-		ctx, stop := signal.NotifyContext(
-			context.Background(),
-			os.Interrupt,
-			syscall.SIGTERM,
-		)
-		defer stop()
-		// Thread 1: Start lifecycle tracer
-		cleanupLifecycle, err := startLifecycle(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer cleanupLifecycle()
-
-		// Thread 2: get current GPU procs are running, get all .so and syms
-		pids, err := pid.GetRunningProcesses()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(pids) != 0 {
-			pids.CachePID() // cache the PID info into map
-		}
-		// c := pid.GlobalPIDCache() get global cache instance
-
-		err = so.InitFromSharedObject(internal.CudaSo)
-		if err != nil {
-			log.Fatal(err)
-		}
-		// Thread 3: Observe cuInit events
-		cleanupCuInit, err := startCuInitTracer(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer cleanupCuInit()
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if rootCancel != nil {
+			rootCancel()
+		}
 		ret := nvml.Shutdown()
 		if ret != nvml.SUCCESS {
 			log.Fatalf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
@@ -103,93 +82,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&internal.LogLevel, "log-level", "v", "info", "Log level")
 }
 
-func startLifecycle(parent context.Context) (func(), error) {
-
-	logging.L().Debug().Msg("Starting lifecycle tracer...")
-
-	ctx, cancel := context.WithCancel(parent)
-
-	cfg := lifecycle.Config{} // if you have any config, set it here
-	loader, err := lifecycle.LoadProcExitObjects(cfg)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := loader.Attach(cfg); err != nil {
-		cancel()
-		log.Fatal(err)
-	}
-
-	reader, err := lifecycle.NewRingbufReader(loader)
-	if err != nil {
-		cancel()
-		loader.Close()
-		return nil, err
-	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		lifecycle.RunProcExitRd(ctx, reader, cfg)
-	}()
-
-	// cleanup function
-	return func() {
-		cancel()
-		reader.Close()
-		<-done
-		loader.Close()
-	}, nil
-}
-
-func startCuInitTracer(parent context.Context) (func(), error) {
-	logging.L().Debug().Msg("Starting cuInit tracer...")
-	ctx, cancel := context.WithCancel(parent)
-
-	cfg := lifecycle.Config{}
-	loader, err := lifecycle.LoadCuInitObjects(cfg)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-
-	links, err := loader.Attach(internal.CudaSo, loader)
-	if err != nil {
-		cancel()
-		loader.Close()
-		return nil, err
-	}
-
-	reader, err := lifecycle.NewCuInitRingbufReader(loader)
-	if err != nil {
-		cancel()
-		for _, l := range links {
-			l.Close()
-		}
-		loader.Close()
-		return nil, err
-	}
-
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		lifecycle.RunCuInitRd(ctx, reader, cfg)
-	}()
-
-	// cleanup
-	return func() {
-		cancel()
-		reader.Close()
-		for _, link := range links {
-			link.Close()
-		}
-		<-done
-		loader.Close()
-	}, nil
-}
 func Execute() {
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(rootCtx); err != nil {
 		os.Exit(1)
 	}
 }

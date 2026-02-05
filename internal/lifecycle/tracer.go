@@ -41,6 +41,8 @@ func (r *ProcExitTracer) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			logging.L().Debug().Msg("ProcExitTracer done")
+
 			return nil
 		default:
 		}
@@ -56,7 +58,7 @@ func (r *ProcExitTracer) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		logging.L().Debug().Uint32("pid", ev.Pid).Msg("pid is existed")
+		logging.L().Debug().Uint32("pid", ev.Pid).Msg("pid is exited")
 		r.pidCache.Delete(ev.Pid)
 	}
 }
@@ -67,6 +69,7 @@ func (r *CuInitTracer) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			logging.L().Debug().Msg("CuInitTracer done")
 			return nil
 		default:
 		}

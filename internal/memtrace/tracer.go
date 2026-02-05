@@ -33,47 +33,37 @@ func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
 func (t *Tracer) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
+		logging.L().Debug().Msg("SIGTERM received, closing ringbuf")
 		t.rd.Close()
-		logging.L().Debug().
-			Msg("mem trace stopped")
-
 	}()
 	aggregator := NewLeakAggregator()
 	go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-
-		default:
-			record, err := t.rd.Read()
-			if err != nil {
-				if errors.Is(err, ringbuf.ErrClosed) {
-					return nil
-				}
-				logging.L().Error().
-					Err(err).
-					Msg("ringbuf read failed")
-				continue
+		record, err := t.rd.Read()
+		if err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				logging.L().Debug().Msg("ringbuf closed, exiting")
+				return nil
 			}
-
-			ev, err := decodeMemoryEvent(record.RawSample)
-			if err != nil {
-				logging.L().Error().
-					Err(err).
-					Msg("event decode failed")
-				continue
-			}
-			inspector := t.pidCache.GetOrInspect(
-				ev.Process.Process.PID,
-				func(p uint32) (pid.PIDInspection, error) {
-					return pid.InspectPID(int32(p)), nil
-				},
-			)
-
-			aggregator.Consume(ev, inspector)
-
+			logging.L().Error().Err(err).Msg("ringbuf read failed")
+			continue
 		}
+		ev, err := decodeMemoryEvent(record.RawSample)
+		if err != nil {
+			logging.L().Error().
+				Err(err).
+				Msg("event decode failed")
+			continue
+		}
+		inspector := t.pidCache.GetOrInspect(
+			ev.Process.Process.PID,
+			func(p uint32) (pid.PIDInspection, error) {
+				return pid.InspectPID(int32(p)), nil
+			},
+		)
+
+		aggregator.Consume(ev, inspector)
+
 	}
 }
 
