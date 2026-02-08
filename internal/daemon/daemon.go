@@ -3,18 +3,38 @@ package daemon
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
-	"github.com/vuvietnguyenit/gpuxray/internal/so"
 )
 
 type Daemon struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+}
+
+func NewDaemon(ctx context.Context) *Daemon {
+	return &Daemon{
+		ctx: ctx,
+	}
+}
+
+func (d *Daemon) Go(fn func(ctx context.Context)) {
+	d.wg.Go(func() {
+		fn(d.ctx)
+	})
+}
+
+func (d *Daemon) Wait() {
+	<-d.ctx.Done()
+	logging.L().Debug().Msg("daemon shutting down ...")
+	d.wg.Wait()
+	logging.L().Debug().Msg("all daemon goroutines exited")
+
 }
 
 func (d *Daemon) Stop() {
@@ -92,13 +112,16 @@ func startCuInitTracer(parent context.Context) (func(), error) {
 
 	go func() {
 		defer close(done)
+		go func() {
+			<-ctx.Done()
+			reader.Close()
+		}()
 		lifecycle.RunCuInitRd(ctx, reader, cfg)
 	}()
 
 	// cleanup
 	return func() {
 		cancel()
-		reader.Close()
 		for _, link := range links {
 			link.Close()
 		}
@@ -107,23 +130,19 @@ func startCuInitTracer(parent context.Context) (func(), error) {
 	}, nil
 }
 
-func Start(parent context.Context) (*Daemon, error) {
-	parent, cancel := context.WithCancel(parent)
-	d := &Daemon{
-		ctx:    parent,
-		cancel: cancel,
-	}
-	if err := so.InitFromSharedObject(internal.CudaSo); err != nil {
-		return nil, err
-	}
-	// lifecycle tracer
-	d.wg.Go(func() {
-		startLifecycle(parent)
+func Start(parent context.Context) (error, *Daemon) {
+	daemon := NewDaemon(parent)
+	daemon.Go(func(ctx context.Context) {
+		_, err := startCuInitTracer(ctx)
+		if err != nil {
+			os.Exit(1)
+		}
 	})
-
-	d.wg.Go(func() {
-		startCuInitTracer(parent)
+	daemon.Go(func(ctx context.Context) {
+		_, err := startLifecycle(ctx)
+		if err != nil {
+			os.Exit(1)
+		}
 	})
-	logging.L().Info().Msg("daemon started")
-	return d, nil
+	return nil, daemon
 }

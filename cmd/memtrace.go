@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"context"
+	"fmt"
 	"log"
 	"os"
 
@@ -38,8 +38,17 @@ func init() {
 }
 
 func runMemtrace(cmd *cobra.Command, _ []string) error {
-	ctx, cancel := context.WithCancel(cmd.Context())
-	defer cancel()
+	// get context from root
+	ctx := cmd.Context()
+	// DEBUG purpose
+	go func() {
+		<-rootCtx.Done()
+		logging.L().Debug().
+			Err(ctx.Err()).
+			Msg("runMemtrace context canceled")
+
+	}()
+	//
 	cfg := memtrace.Config{
 		PID:      Pid,
 		DeviceID: DeviceID,
@@ -48,14 +57,6 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	// DEBUG purpose
-	go func() {
-		<-ctx.Done()
-		logging.L().Debug().
-			Err(ctx.Err()).
-			Msg("memtrace context canceled")
-
-	}()
 	defer objs.Close()
 	var pids pid.ListPIDInspection
 	if Pid != 0 {
@@ -89,16 +90,20 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 		}()
 	}
 	// NOTE: You need to load daemon after initial done everything that is related to BPF initial
-	d, err := daemon.Start(ctx)
+	err, d := daemon.Start(ctx)
 	if err != nil {
 		return err
 	}
-	defer d.Stop()
 	rd, err := memtrace.NewRingbufReader(objs)
 	if err != nil {
 		return err
 	}
 	defer rd.Close()
-
-	return memtrace.Run(ctx, rd, cfg)
+	fmt.Println("run here")
+	err = memtrace.Run(ctx, rd, cfg)
+	if err != nil {
+		return err
+	}
+	d.Wait()
+	return nil
 }

@@ -35,11 +35,6 @@ var rootCmd = &cobra.Command{
 	Short: "eBPF tool this help tracing and investigating GPU",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		rootCtx, rootCancel = signal.NotifyContext(
-			context.Background(),
-			os.Interrupt,
-			syscall.SIGTERM,
-		)
 		// DEBUG purpose
 		go func() {
 			<-rootCtx.Done()
@@ -83,7 +78,12 @@ func init() {
 }
 
 func Execute() {
-
+	rootCtx, rootCancel = signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer rootCancel()
 	if err := rootCmd.ExecuteContext(rootCtx); err != nil {
 		os.Exit(1)
 	}

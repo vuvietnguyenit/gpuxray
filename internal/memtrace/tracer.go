@@ -36,35 +36,70 @@ func (t *Tracer) Run(ctx context.Context) error {
 		logging.L().Debug().Msg("SIGTERM received, closing ringbuf")
 		t.rd.Close()
 	}()
-	aggregator := NewLeakAggregator()
-	go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
+	events := make(chan []byte, 1024)
+	go func() {
+		defer close(events)
+
+		for {
+			record, err := t.rd.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					return
+				}
+				continue
+			}
+
+			select {
+			case events <- record.RawSample:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	for {
-		record, err := t.rd.Read()
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				logging.L().Debug().Msg("ringbuf closed, exiting")
+		select {
+		case <-ctx.Done():
+			return nil
+		case raw, ok := <-events:
+			if !ok {
 				return nil
 			}
-			logging.L().Error().Err(err).Msg("ringbuf read failed")
-			continue
+			_, err := decodeMemoryEvent(raw)
+			if err != nil {
+				logging.L().Error().Err(err).Msg("decode failed")
+			}
 		}
-		ev, err := decodeMemoryEvent(record.RawSample)
-		if err != nil {
-			logging.L().Error().
-				Err(err).
-				Msg("event decode failed")
-			continue
-		}
-		inspector := t.pidCache.GetOrInspect(
-			ev.Process.Process.PID,
-			func(p uint32) (pid.PIDInspection, error) {
-				return pid.InspectPID(int32(p)), nil
-			},
-		)
-
-		aggregator.Consume(ev, inspector)
-
 	}
+	// aggregator := NewLeakAggregator()
+	// go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
+	// for {
+	// 	_, err := t.rd.Read()
+	// 	if err != nil {
+	// 		if errors.Is(err, ringbuf.ErrClosed) {
+	// 			logging.L().Debug().Msg("ringbuf closed, exiting")
+	// 			return nil
+	// 		}
+	// 		logging.L().Error().Err(err).Msg("ringbuf read failed")
+	// 		continue
+	// 	}
+	// _, err = decodeMemoryEvent(record.RawSample)
+	// if err != nil {
+	// 	logging.L().Error().
+	// 		Err(err).
+	// 		Msg("event decode failed")
+	// 	continue
+	// }
+	// fmt.Println(ev)
+	// inspector := t.pidCache.GetOrInspect(
+	// 	ev.Process.Process.PID,
+	// 	func(p uint32) (pid.PIDInspection, error) {
+	// 		return pid.InspectPID(int32(p)), nil
+	// 	},
+	// )
+
+	// aggregator.Consume(ev, inspector)
+
+	// }
 }
 
 // Detect memory leaks based on allocation and free events
