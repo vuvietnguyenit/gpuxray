@@ -27,12 +27,17 @@ func decodeMemoryEvent(data []byte) (event.MemoryEvent, error) {
 	if err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &raw); err != nil {
 		return event.MemoryEvent{}, err
 	}
+
 	return event.MemoryEvent{
-		TS:      time.Unix(0, int64(raw.Timestamp)),
-		Process: pid.InspectPID(int32(raw.Pid)),
-		TID:     int(raw.Tid),
-		Bytes:   raw.Size,
-		Ptr:     raw.DevicePtr,
-		Op:      event.MemoryEventType(raw.Type),
+		TS: time.Unix(0, int64(raw.Timestamp)),
+		Process: pid.GlobalPIDCache().GetOrInspect(raw.Pid,
+			// create inspector to inspect PID in slow part
+			func(p uint32) (pid.PIDInspection, error) {
+				return pid.InspectPID(int32(p)), nil
+			}),
+		TID:   int(raw.Tid),
+		Bytes: raw.Size,
+		Ptr:   raw.DevicePtr,
+		Op:    event.MemoryEventType(raw.Type),
 	}, nil
 }
