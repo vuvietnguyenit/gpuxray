@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/vuvietnguyenit/gpuxray/internal"
-	"github.com/vuvietnguyenit/gpuxray/internal/daemon"
+	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
@@ -36,6 +36,8 @@ func NewCmd() *cobra.Command {
 func init() {
 	rootCmd.AddCommand(NewCmd())
 }
+
+var wg sync.WaitGroup
 
 func runMemtrace(cmd *cobra.Command, _ []string) error {
 	// get context from root
@@ -89,21 +91,21 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			}
 		}()
 	}
-	// NOTE: You need to load daemon after initial done everything that is related to BPF initial
-	err, d := daemon.Start(ctx)
-	if err != nil {
-		return err
-	}
+	wg.Go(func() {
+		lifecycle.TraceProcessExit(ctx)
+	})
+	wg.Go(func() {
+		lifecycle.TraceCuInitCall(ctx)
+	})
 	rd, err := memtrace.NewRingbufReader(objs)
 	if err != nil {
 		return err
 	}
 	defer rd.Close()
-	fmt.Println("run here")
 	err = memtrace.Run(ctx, rd, cfg)
 	if err != nil {
 		return err
 	}
-	d.Wait()
+	wg.Wait()
 	return nil
 }
