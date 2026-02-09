@@ -34,7 +34,7 @@ struct cu_mem_alloc_event {
 // Ring buffer for memory-leaked events
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
-  __uint(max_entries, 256 * 1024); // 256 KB
+  __uint(max_entries, 1 << 24); // 16MB
 } memleak_ringbuf_events SEC(".maps");
 
 // Hash map to track allocations (device_ptr -> size)

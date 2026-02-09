@@ -20,7 +20,7 @@ struct process_exit_event {
  */
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 20); /* 1MB */
+    __uint(max_entries, 1 << 24); /* 16MB */
 } lifecycle_events SEC(".maps");
 
 /*
