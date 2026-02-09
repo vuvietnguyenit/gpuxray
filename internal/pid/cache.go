@@ -65,8 +65,14 @@ func (c *PIDCache) GetOrInspect(
 func (c *PIDCache) Delete(pid uint32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	delete(c.cache, pid)
+}
+func (c *PIDCache) Exists(pid uint32) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, ok := c.cache[pid]
+	return ok
 }
 
 func (c *PIDCache) Reset() {
@@ -74,6 +80,18 @@ func (c *PIDCache) Reset() {
 	defer c.mu.Unlock()
 
 	c.cache = make(map[uint32]PIDInspection)
+}
+
+func (c *PIDCache) List() []PIDInspection {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	out := make([]PIDInspection, 0, len(c.cache))
+	for _, v := range c.cache {
+		out = append(out, v)
+	}
+
+	return out
 }
 
 func (c *PIDCache) GetCUDASharedObjectPaths() []string {

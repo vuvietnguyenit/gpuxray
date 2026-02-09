@@ -75,10 +75,8 @@ func (t *Tracer) Run(ctx context.Context) error {
 	}
 }
 
-// Detect memory leaks based on allocation and free events
 type LeakKey struct {
 	PID         uint32
-	TID         int
 	DeviceIndex int
 	UUID        string
 }
@@ -94,13 +92,15 @@ type MemoryLeakResult struct {
 }
 
 type LeakAggregator struct {
-	mu    sync.Mutex
-	state map[LeakKey]*MemoryLeakResult
+	mu       sync.Mutex
+	state    map[LeakKey]*MemoryLeakResult
+	pidCache *pid.PIDCache
 }
 
 func NewLeakAggregator() *LeakAggregator {
 	return &LeakAggregator{
-		state: make(map[LeakKey]*MemoryLeakResult),
+		state:    make(map[LeakKey]*MemoryLeakResult),
+		pidCache: pid.GlobalPIDCache(),
 	}
 }
 
@@ -113,7 +113,6 @@ func (a *LeakAggregator) Consume(
 	for _, gpu := range ev.Process.GPUs {
 		key := LeakKey{
 			PID:         ev.Process.Process.PID,
-			TID:         ev.TID,
 			DeviceIndex: gpu.DeviceIndex,
 			UUID:        gpu.UUID,
 		}
@@ -144,7 +143,35 @@ func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	live := make(map[uint32]pid.PIDInspection)
+	for _, p := range a.pidCache.List() {
+		live[p.Process.PID] = p
+	}
+
+	for k := range a.state {
+		if _, ok := live[k.PID]; !ok {
+			delete(a.state, k)
+		}
+	}
+	for _, proc := range live {
+		for _, gpu := range proc.GPUs {
+			key := LeakKey{
+				PID:         proc.Process.PID,
+				DeviceIndex: gpu.DeviceIndex,
+				UUID:        gpu.UUID,
+			}
+
+			if _, ok := a.state[key]; !ok {
+				a.state[key] = &MemoryLeakResult{
+					Key:     key,
+					Process: proc.Process,
+				}
+			}
+		}
+	}
+
 	out := make([]MemoryLeakResult, 0, len(a.state))
+
 	for _, v := range a.state {
 		leaked := uint64(0)
 		if v.AllocBytes > v.FreeBytes {
@@ -161,6 +188,7 @@ func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
 			FreeCount:  v.FreeCount,
 		})
 	}
+
 	return out
 }
 
