@@ -107,8 +107,13 @@ func (c *PIDCache) GetCUDASharedObjectPaths() []string {
 
 	out := make([]string, 0, len(seen))
 	for lib := range seen {
-		out = append(out, lib)
+		f, err := internal.CheckFileStat(lib)
+		if err != nil {
+			continue
+		}
+		if f.Exists {
+			out = append(out, f.Path)
+		}
 	}
-	out = internal.FilterValidCUDASharedObjects(out)
 	return out
 }

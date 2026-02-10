@@ -4,7 +4,9 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -141,4 +143,35 @@ func HumanBytes(b uint64) string {
 	suffix := "KMGTPE"[exp]
 
 	return fmt.Sprintf("%.2f %ciB", value, suffix)
+}
+
+type FileStat struct {
+	Path    string
+	Exists  bool
+	IsDir   bool
+	Size    int64
+	Mode    os.FileMode
+	ModTime int64
+}
+
+func CheckFileStat(path string) (*FileStat, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return &FileStat{
+				Path:   path,
+				Exists: false,
+			}, nil
+		}
+		return nil, fmt.Errorf("stat failed for %s: %w", path, err)
+	}
+
+	return &FileStat{
+		Path:    path,
+		Exists:  true,
+		IsDir:   info.IsDir(),
+		Size:    info.Size(),
+		Mode:    info.Mode(),
+		ModTime: info.ModTime().Unix(),
+	}, nil
 }

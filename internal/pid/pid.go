@@ -36,6 +36,16 @@ func getCUDASharedObject(pid int) ([]string, error) {
 		out = append(out, lib.Pathname)
 	}
 	out = internal.FilterValidCUDASharedObjects(out)
+	// check shared object path is valid
+	for _, lib := range out {
+		f, err := internal.CheckFileStat(lib)
+		if err != nil {
+			continue
+		}
+		if f.Exists {
+			out = append(out, f.Path)
+		}
+	}
 	return out, nil
 }
 
