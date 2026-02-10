@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	Pid      int
+	Pid      uint32
 	DeviceID int
 )
 
@@ -27,7 +27,7 @@ func NewCmd() *cobra.Command {
 		RunE:  runMemtrace,
 	}
 
-	cmd.Flags().IntVar(&Pid, "pid", 0, "Trace specific PID (0 = all)")
+	cmd.Flags().Uint32Var(&Pid, "pid", 0, "Trace specific PID (0 = all)")
 	cmd.Flags().IntVar(&DeviceID, "device", -1, "GPU device ID (-1 = all)")
 
 	return cmd
@@ -62,8 +62,8 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	defer objs.Close()
 	var pids pid.ListPIDInspection
 	if Pid != 0 {
-		process := pid.InspectPID(int32(Pid))
-		pids = append(pids, process)
+		process := pid.InspectPID(Pid)
+		pids = append(pids, *process)
 	} else {
 		pids, err = pid.GetRunningProcesses()
 		if err != nil {

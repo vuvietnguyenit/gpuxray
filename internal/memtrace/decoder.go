@@ -33,7 +33,7 @@ func decodeMemoryEvent(data []byte) (event.MemoryEvent, error) {
 		Process: pid.GlobalPIDCache().GetOrInspect(raw.Pid,
 			// create inspector to inspect PID in slow part
 			func(p uint32) (pid.PIDInspection, error) {
-				return pid.InspectPID(int32(p)), nil
+				return *pid.InspectPID(p), nil
 			}),
 		TID:   int(raw.Tid),
 		Bytes: raw.Size,

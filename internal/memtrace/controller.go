@@ -10,7 +10,7 @@ import (
 )
 
 type Config struct {
-	PID      int
+	PID      uint32
 	DeviceID int
 }
 
