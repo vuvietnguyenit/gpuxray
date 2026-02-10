@@ -18,14 +18,19 @@ type Objects struct {
 }
 
 func LoadObjects(cfg Config) (*Objects, error) {
-	var objs gen.MemdriverObjects
-
-	if err := gen.LoadMemdriverObjects(&objs, nil); err != nil {
+	spec, err := gen.LoadMemdriver()
+	if err != nil {
 		return nil, err
 	}
-
-	// optional: PID / device filtering via maps here
-
+	if err := spec.RewriteConstants(map[string]interface{}{
+		"target_pid": cfg.PID,
+	}); err != nil {
+		return nil, err
+	}
+	var objs gen.MemdriverObjects
+	if err := spec.LoadAndAssign(&objs, nil); err != nil {
+		return nil, err
+	}
 	return &Objects{&objs}, nil
 }
 
