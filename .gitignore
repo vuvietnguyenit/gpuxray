@@ -55,3 +55,4 @@ go.sum.backup
 vmlinux.h
 *_bpfel.go
 gpuxray
+note.md
