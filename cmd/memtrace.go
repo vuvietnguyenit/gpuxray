@@ -1,17 +1,14 @@
 package cmd
 
 import (
-	"log"
 	"os"
 	"sync"
 
 	"github.com/spf13/cobra"
-	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
-	"github.com/vuvietnguyenit/gpuxray/internal/so"
 )
 
 var (
@@ -74,10 +71,10 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	if len(pids) != 0 {
 		pids.CachePID()
 	}
-	err = so.InitFromSharedObject(internal.CudaSo)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// err = so.InitFromSharedObject(internal.CudaSo)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range pid.GlobalPIDCache().GetCUDASharedObjectPaths() {
 		logging.L().Debug().
