@@ -60,8 +60,12 @@ func TraceProcessExit(parent context.Context) {
 			log.Printf("reading from reader: %s", err)
 			continue
 		}
-
-		log.Println("Record:", record)
+		ev, err := decodeProcessExitEvent(record.RawSample)
+		if err != nil {
+			continue
+		}
+		logging.L().Debug().Uint32("pid", ev.Pid).Msg("pid is exited")
+		pid.GlobalPIDCache().Delete(ev.Pid)
 	}
 
 }
@@ -117,10 +121,11 @@ func TraceCuInitCall(parent context.Context) {
 		logging.L().Debug().
 			Int("pid", int(ev.PID)).
 			Msg("cuInit called")
-		isp := pid.GlobalPIDCache().GetOrInspect(ev.PID, func(u uint32) (pid.PIDInspection, error) {
-			return pid.InspectPID(int32(u)), nil
-		})
-		pid.GlobalPIDCache().Set(ev.PID, isp)
+		isp := pid.InspectPID(ev.PID)
+		if isp != nil {
+			pid.GlobalPIDCache().Set(ev.PID, *isp)
+		}
+
 	}
 
 }

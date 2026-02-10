@@ -90,7 +90,7 @@ func inspectProc(pid uint32) (USProcessInfo, error) {
 	}, nil
 }
 
-func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
+func inspectGPUUsage(pid uint32) ([]GPUUsage, error) {
 	var usages []GPUUsage
 
 	ret := nvml.Init()
@@ -118,7 +118,7 @@ func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
 		}
 
 		for _, p := range procs {
-			if int32(p.Pid) == pid {
+			if p.Pid == pid {
 				usages = append(usages, GPUUsage{
 					DeviceIndex: i,
 					UUID:        uuid,
@@ -130,13 +130,13 @@ func inspectGPUUsage(pid int32) ([]GPUUsage, error) {
 	return usages, nil
 }
 
-func InspectPID(pid int32) PIDInspection {
+func InspectPID(pid uint32) *PIDInspection {
 	result := PIDInspection{}
 
-	proc, err := inspectProc(uint32(pid))
+	proc, err := inspectProc(pid)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
-		return result
+		return &result
 	}
 	result.Process = proc
 	gpus, err := inspectGPUUsage(pid)
@@ -144,8 +144,7 @@ func InspectPID(pid int32) PIDInspection {
 		result.Errors = append(result.Errors, err.Error())
 	}
 	result.GPUs = gpus
-
-	return result
+	return &result
 }
 
 // GetRunningProcesses returns all PIDs using CUDA
@@ -192,7 +191,7 @@ func GetRunningProcesses() (ListPIDInspection, error) {
 
 	results := make([]PIDInspection, 0, len(gpuPIDs))
 	for pid := range gpuPIDs {
-		results = append(results, InspectPID(int32(pid)))
+		results = append(results, *InspectPID(pid))
 	}
 
 	return results, nil
