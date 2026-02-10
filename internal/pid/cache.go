@@ -43,12 +43,10 @@ func (c *PIDCache) GetOrInspect(
 	if ins, ok := c.Get(pid); ok {
 		return ins
 	}
-
-	// slow path
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	// double-check after lock
+
 	if ins, ok := c.cache[pid]; ok {
 		return ins
 	}
@@ -57,8 +55,6 @@ func (c *PIDCache) GetOrInspect(
 	if err != nil {
 		ins.Errors = append(ins.Errors, err.Error())
 	}
-
-	c.cache[pid] = ins
 	return ins
 }
 
