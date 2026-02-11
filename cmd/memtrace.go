@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"os"
+	"fmt"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -24,7 +24,7 @@ func NewCmd() *cobra.Command {
 		RunE:  runMemtrace,
 	}
 
-	cmd.Flags().Uint32Var(&Pid, "pid", 0, "Trace specific PID (0 = all)")
+	cmd.Flags().Uint32VarP(&Pid, "pid", "p", 0, "Trace specific PID (0 = all)")
 	cmd.Flags().IntVar(&DeviceID, "device", -1, "GPU device ID (-1 = all)")
 
 	return cmd
@@ -58,23 +58,15 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	}
 	defer objs.Close()
 	var pids pid.ListPIDInspection
-	if Pid != 0 {
-		process := pid.InspectPID(Pid)
-		pids = append(pids, *process)
-	} else {
-		pids, err = pid.GetRunningProcesses()
-		if err != nil {
-			logging.L().Err(err).Msg("Failed to get running GPU processes")
-			os.Exit(1)
-		}
+	if Pid == 0 {
+		return fmt.Errorf("pid %d doesn't exist", Pid)
 	}
+	process := pid.InspectPID(Pid)
+	pids = append(pids, *process)
+
 	if len(pids) != 0 {
 		pids.CachePID()
 	}
-	// err = so.InitFromSharedObject(internal.CudaSo)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
 	syms := pids.EnumerateSymNames("*")
 	for _, libPath := range pid.GlobalPIDCache().GetCUDASharedObjectPaths() {
 		logging.L().Debug().
@@ -91,9 +83,6 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	wg.Go(func() {
 		lifecycle.TraceProcessExit(ctx)
 	})
-	// wg.Go(func() {
-	// 	lifecycle.TraceCuInitCall(ctx)
-	// })
 	rd, err := memtrace.NewRingbufReader(objs)
 	if err != nil {
 		return err

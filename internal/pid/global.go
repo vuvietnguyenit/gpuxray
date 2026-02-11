@@ -3,9 +3,8 @@ package pid
 import "sync"
 
 var (
-	globalCache  *PIDCache
-	once         sync.Once
-	globalSoPath []string
+	globalCache *PIDCache
+	once        sync.Once
 )
 
 func GlobalPIDCache() *PIDCache {
@@ -15,10 +14,3 @@ func GlobalPIDCache() *PIDCache {
 	})
 	return globalCache
 }
-
-// func GlobalSoPaths() []string {
-// 	once.Do(func() {
-// 		globalSoPath = enumerateSystemCUDALibs()
-// 	})
-// 	return globalSoPath
-// }

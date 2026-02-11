@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
 )
@@ -25,18 +24,4 @@ func decodeProcessExitEvent(data []byte) (event.LifecycleProcessExitEvent, error
 		Tgid:   raw.TGID,
 		ExitTs: raw.ExitAt,
 	}, nil
-}
-
-func decodeCuInitEvent(data []byte) (*event.CuInitEvent, error) {
-	if len(data) < 24 {
-		return nil, fmt.Errorf("invalid cuinit event size: %d", len(data))
-	}
-
-	var ev event.CuInitEvent
-	err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &ev)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ev, nil
 }
