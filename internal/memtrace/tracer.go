@@ -198,7 +198,7 @@ func PrintHeader() {
 		"TIME",
 		"PID",
 		"GPU",
-		"ALLOC_MB",
+		"INUSE_MB",
 		"AL_CNT",
 		"FR_CNT",
 		"COMM",
