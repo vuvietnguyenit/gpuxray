@@ -5,8 +5,6 @@ package memtrace
 
 import (
 	"context"
-
-	"github.com/cilium/ebpf/ringbuf"
 )
 
 type Config struct {
@@ -14,7 +12,7 @@ type Config struct {
 	DeviceID int
 }
 
-func Run(ctx context.Context, rd *ringbuf.Reader, cfg Config) error {
-	tracer := NewTracer(rd)
+func Run(ctx context.Context, objs *Objects, cfg Config) error {
+	tracer := NewTracer(objs)
 	return tracer.Run(ctx)
 }

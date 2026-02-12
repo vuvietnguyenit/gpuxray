@@ -83,12 +83,7 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	wg.Go(func() {
 		lifecycle.TraceProcessExit(ctx)
 	})
-	rd, err := memtrace.NewRingbufReader(objs)
-	if err != nil {
-		return err
-	}
-	defer rd.Close()
-	err = memtrace.Run(ctx, rd, cfg)
+	err = memtrace.Run(ctx, objs, cfg)
 	if err != nil {
 		return err
 	}
