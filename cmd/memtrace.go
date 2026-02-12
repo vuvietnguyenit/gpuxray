@@ -5,15 +5,11 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
+	"github.com/vuvietnguyenit/gpuxray/internal"
 	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
-)
-
-var (
-	Pid      uint32
-	DeviceID int
 )
 
 func NewCmd() *cobra.Command {
@@ -24,8 +20,9 @@ func NewCmd() *cobra.Command {
 		RunE:  runMemtrace,
 	}
 
-	cmd.Flags().Uint32VarP(&Pid, "pid", "p", 0, "Trace specific PID (0 = all)")
-	cmd.Flags().IntVar(&DeviceID, "device", -1, "GPU device ID (-1 = all)")
+	cmd.Flags().Uint32VarP(&internal.MemoryleakFlags.Pid, "pid", "p", 0, "Trace specific PID (0 = all)")
+	cmd.Flags().IntVar(&internal.MemoryleakFlags.DeviceID, "device", -1, "GPU device ID (-1 = all)")
+	cmd.Flags().BoolVar(&internal.MemoryleakFlags.PrintStack, "print-stacks", false, "Print stack traces")
 
 	return cmd
 }
@@ -49,8 +46,8 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	}()
 	//
 	cfg := memtrace.Config{
-		PID:      Pid,
-		DeviceID: DeviceID,
+		PID:      internal.MemoryleakFlags.Pid,
+		DeviceID: internal.MemoryleakFlags.DeviceID,
 	}
 	objs, err := memtrace.LoadObjects(cfg)
 	if err != nil {
@@ -58,10 +55,10 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 	}
 	defer objs.Close()
 	var pids pid.ListPIDInspection
-	if Pid == 0 {
-		return fmt.Errorf("pid %d doesn't exist", Pid)
+	if internal.MemoryleakFlags.Pid == 0 {
+		return fmt.Errorf("pid %d doesn't exist", internal.MemoryleakFlags.Pid)
 	}
-	process := pid.InspectPID(Pid)
+	process := pid.InspectPID(internal.MemoryleakFlags.Pid)
 	pids = append(pids, *process)
 
 	if len(pids) != 0 {

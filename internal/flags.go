@@ -4,7 +4,9 @@
 package internal
 
 type MemleakFlags struct {
-	Pid uint32
+	Pid        uint32
+	PrintStack bool
+	DeviceID   int
 }
 
 var MemoryleakFlags MemleakFlags

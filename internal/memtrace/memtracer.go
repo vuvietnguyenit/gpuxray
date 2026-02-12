@@ -15,20 +15,27 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
-	"github.com/vuvietnguyenit/gpuxray/internal/symbolizer"
 )
 
-type Tracer struct {
-	pidCache   *pid.PIDCache
-	ebpfObjs   *Objects
-	symbolizer *symbolizer.Symbolizer
+type gpuMemoryTracer struct {
+	pidCache *pid.PIDCache
+	ebpfObjs *Objects
+	cfg      Config
+}
+type gpuMemoryEvent struct {
+	TS      time.Time
+	Process pid.PIDInspection
+	TID     int
+	Bytes   uint64
+	Ptr     uint64
+	Op      event.MemoryEventType
 }
 
-func NewTracer(o *Objects) *Tracer {
-	return &Tracer{
-		pidCache:   pid.GlobalPIDCache(),
-		ebpfObjs:   o,
-		symbolizer: symbolizer.New(),
+func NewGPUMemoryTracer(o *Objects, cfg Config) *gpuMemoryTracer {
+	return &gpuMemoryTracer{
+		pidCache: pid.GlobalPIDCache(),
+		ebpfObjs: o,
+		cfg:      cfg,
 	}
 }
 
@@ -36,7 +43,7 @@ func newRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
 	return ringbuf.NewReader(objs.MemleakRingbufEvents)
 }
 
-func (t *Tracer) Run(ctx context.Context) error {
+func (t *gpuMemoryTracer) Run(ctx context.Context) error {
 	rd, err := newRingbufReader(t.ebpfObjs)
 	if err != nil {
 		return err
@@ -77,7 +84,18 @@ func (t *Tracer) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			e, err := t.decodeMemoryEvent(raw)
+			bpfEvent, err := decodeMemoryEvent(raw)
+			e := gpuMemoryEvent{
+				TS: time.Unix(0, int64(bpfEvent.Timestamp)),
+				Process: pid.GlobalPIDCache().GetOrInspect(bpfEvent.Pid,
+					func(p uint32) (pid.PIDInspection, error) {
+						return *pid.InspectPID(p), nil
+					}),
+				TID:   int(bpfEvent.Tid),
+				Bytes: bpfEvent.Size,
+				Ptr:   bpfEvent.DevicePtr,
+				Op:    event.MemoryEventType(bpfEvent.Type),
+			}
 			if err != nil {
 				logging.L().Error().Err(err).Msg("decode failed")
 			}
@@ -116,7 +134,7 @@ func NewLeakAggregator() *LeakAggregator {
 }
 
 func (a *LeakAggregator) Consume(
-	ev event.MemoryEvent,
+	ev gpuMemoryEvent,
 ) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

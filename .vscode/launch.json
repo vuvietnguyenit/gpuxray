@@ -26,7 +26,20 @@
             "preLaunchTask": "make: build",
             "args": [
                 "memtrace",
-                "--pid", "1797029"
+                "--pid", "693204"
+            ]
+        },
+        {
+            "name": "Experimental: Memleak Trace cmd: stacktrace PID",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/main.go",
+            "preLaunchTask": "make: build",
+            "args": [
+                "memtrace",
+                "--pid", "693204",
+                "--print-stacks"
             ]
         }
     ]
