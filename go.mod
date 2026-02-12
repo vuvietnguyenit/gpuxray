@@ -7,6 +7,7 @@ tool github.com/cilium/ebpf/cmd/bpf2go
 require (
 	github.com/NVIDIA/go-nvml v0.13.0-1
 	github.com/cilium/ebpf v0.20.0
+	github.com/ianlancetaylor/demangle v0.0.0-20251118225945-96ee0021ea0f
 	github.com/prometheus/procfs v0.19.2
 	github.com/rs/zerolog v1.34.0
 	github.com/shirou/gopsutil/v3 v3.24.5

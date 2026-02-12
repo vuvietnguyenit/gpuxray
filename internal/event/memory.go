@@ -9,7 +9,7 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
-type MemoryEventType uint8
+type MemoryEventType uint32
 
 type Event interface {
 	Type() Type
@@ -31,7 +31,5 @@ type MemoryEvent struct {
 	Bytes   uint64
 	Ptr     uint64
 	Op      MemoryEventType
+	StackID []uint64
 }
-
-func (e MemoryEvent) Type() Type           { return EventMemory }
-func (e MemoryEvent) Timestamp() time.Time { return e.TS }

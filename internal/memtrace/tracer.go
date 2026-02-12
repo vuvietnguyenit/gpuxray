@@ -15,33 +15,44 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
+	"github.com/vuvietnguyenit/gpuxray/internal/symbolizer"
 )
 
 type Tracer struct {
-	rd       *ringbuf.Reader
-	pidCache *pid.PIDCache
+	pidCache   *pid.PIDCache
+	ebpfObjs   *Objects
+	symbolizer *symbolizer.Symbolizer
 }
 
-func NewTracer(rd *ringbuf.Reader) *Tracer {
-	return &Tracer{rd: rd, pidCache: pid.GlobalPIDCache()}
+func NewTracer(o *Objects) *Tracer {
+	return &Tracer{
+		pidCache:   pid.GlobalPIDCache(),
+		ebpfObjs:   o,
+		symbolizer: symbolizer.New(),
+	}
 }
 
-func NewRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
+func newRingbufReader(objs *Objects) (*ringbuf.Reader, error) {
 	return ringbuf.NewReader(objs.MemleakRingbufEvents)
 }
 
 func (t *Tracer) Run(ctx context.Context) error {
+	rd, err := newRingbufReader(t.ebpfObjs)
+	if err != nil {
+		return err
+	}
+	defer rd.Close()
 	go func() {
 		<-ctx.Done()
 		logging.L().Debug().Msg("SIGTERM received, closing ringbuf")
-		t.rd.Close()
+		t.ebpfObjs.MemleakRingbufEvents.Close()
 	}()
 	events := make(chan []byte, 1024)
 	go func() {
 		defer close(events)
 
 		for {
-			record, err := t.rd.Read()
+			record, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, ringbuf.ErrClosed) {
 					return
@@ -66,7 +77,7 @@ func (t *Tracer) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			e, err := decodeMemoryEvent(raw)
+			e, err := t.decodeMemoryEvent(raw)
 			if err != nil {
 				logging.L().Error().Err(err).Msg("decode failed")
 			}

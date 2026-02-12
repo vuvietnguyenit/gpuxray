@@ -10,6 +10,7 @@
 #include <bpf/bpf_tracing.h>
 
 #define TASK_COMM_LEN 16
+#define PERF_MAX_STACK_DEPTH 127
 const volatile u32 target_pid = 0;
 
 enum event_type {
@@ -21,15 +22,27 @@ enum event_type {
 };
 
 /* =========================
+ * Stack trace map
+ * ========================= */
+struct {
+  __uint(type, BPF_MAP_TYPE_STACK_TRACE);
+  __uint(max_entries, 16384);
+  __uint(key_size, sizeof(u32));
+  __uint(value_size, sizeof(u64) * PERF_MAX_STACK_DEPTH);
+} stack_traces SEC(".maps");
+
+/* =========================
  * Event struct
  * ========================= */
 struct cu_mem_alloc_event {
   u32 pid;
   u32 tid;
+  u32 type;
+  s32 stack_id;
+
   u64 timestamp;
   u64 size;
   u64 device_ptr;
-  u32 type;
 };
 
 /* =========================
@@ -120,6 +133,8 @@ int BPF_URETPROBE(trace_cu_mem_malloc_return, int ret) {
   u64 device_ptr = 0;
   bpf_probe_read_user(&device_ptr, sizeof(device_ptr),
                       (void *)info->devptr_addr);
+  s32 stid = 0;
+  stid = bpf_get_stackid(ctx, &stack_traces, BPF_F_USER_STACK);
 
   struct cu_mem_alloc_event *event =
       bpf_ringbuf_reserve(&memleak_ringbuf_events, sizeof(*event), 0);
@@ -130,7 +145,7 @@ int BPF_URETPROBE(trace_cu_mem_malloc_return, int ret) {
   event->size = info->size;
   event->device_ptr = device_ptr;
   event->type = EVENT_MALLOC;
-
+  event->stack_id = stid;
   bpf_ringbuf_submit(event, 0);
 
   if (device_ptr)
@@ -159,6 +174,7 @@ int BPF_UPROBE(trace_cu_mem_free, void *devPtr) {
   populate_event_common(event);
   event->device_ptr = device_ptr;
   event->type = EVENT_FREE;
+  event->stack_id = bpf_get_stackid(ctx, &stack_traces, BPF_F_USER_STACK);
 
   u64 *size = bpf_map_lookup_elem(&active_allocs, &device_ptr);
   if (size) {
@@ -217,6 +233,7 @@ int BPF_URETPROBE(trace_cu_mem_malloc_managed_return, int ret) {
   event->size = info->size;
   event->device_ptr = device_ptr;
   event->type = EVENT_MALLOC_MANAGED;
+  event->stack_id = bpf_get_stackid(ctx, &stack_traces, BPF_F_USER_STACK);
 
   bpf_ringbuf_submit(event, 0);
 
