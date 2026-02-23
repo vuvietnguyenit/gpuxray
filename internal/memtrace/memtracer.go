@@ -161,6 +161,9 @@ func (a *LeakAggregator) Consume(
 			entry.AllocCount++
 
 		case event.MemFree:
+			if ev.Bytes == 0 {
+				continue
+			}
 			entry.FreeBytes += ev.Bytes
 			entry.FreeCount++
 		}
