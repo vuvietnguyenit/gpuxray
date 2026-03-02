@@ -100,6 +100,7 @@ func (s *Symbolizer) loadELF(path string) (*elfCache, error) {
 
 	return ec, nil
 }
+
 func resolveSymbol(symbols []elf.Symbol, offset uint64) string {
 	i := sort.Search(len(symbols), func(i int) bool {
 		return symbols[i].Value > offset

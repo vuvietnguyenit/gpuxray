@@ -4,6 +4,7 @@
 package memtrace
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/cilium/ebpf"
@@ -36,6 +37,29 @@ func LoadObjects(cfg Config) (*Objects, error) {
 
 func (o *Objects) Close() error {
 	return o.MemdriverObjects.Close()
+}
+
+// getStack retrieves the stack trace for a given stack ID from the eBPF map.
+func (o *Objects) getStack(stackID int32) ([]uint64, error) {
+	if stackID < 0 {
+		return nil, fmt.Errorf("invalid stack id %d", stackID)
+	}
+	var stack []uint64 = make([]uint64, 127)
+
+	err := o.StackTraces.Lookup(stackID, &stack)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trim trailing zeroes
+	var result []uint64
+	for _, addr := range stack {
+		if addr == 0 {
+			break
+		}
+		result = append(result, addr)
+	}
+	return result, nil
 }
 
 func AttachProbes(cudaLib string, objs *Objects, syms []string) []link.Link {

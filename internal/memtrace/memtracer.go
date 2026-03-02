@@ -15,6 +15,7 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal/event"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
+	"github.com/vuvietnguyenit/gpuxray/internal/symbolizer"
 )
 
 type gpuMemoryTracer struct {
@@ -28,6 +29,7 @@ type gpuMemoryEvent struct {
 	TID     int
 	Bytes   uint64
 	Ptr     uint64
+	StackID int32
 	Op      event.MemoryEventType
 }
 
@@ -75,7 +77,11 @@ func (t *gpuMemoryTracer) Run(ctx context.Context) error {
 		}
 	}()
 	aggregator := NewLeakAggregator()
-	go StartSnapshotPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
+	if internal.MemoryleakFlags.PrintStack {
+		go t.stackPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
+	} else {
+		go t.statsPrinter(ctx, aggregator, time.Duration(internal.FetchInterval)*time.Second)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -91,10 +97,11 @@ func (t *gpuMemoryTracer) Run(ctx context.Context) error {
 					func(p uint32) (pid.PIDInspection, error) {
 						return *pid.InspectPID(p), nil
 					}),
-				TID:   int(bpfEvent.Tid),
-				Bytes: bpfEvent.Size,
-				Ptr:   bpfEvent.DevicePtr,
-				Op:    event.MemoryEventType(bpfEvent.Type),
+				TID:     int(bpfEvent.Tid),
+				Bytes:   bpfEvent.Size,
+				Ptr:     bpfEvent.DevicePtr,
+				StackID: bpfEvent.StackID,
+				Op:      event.MemoryEventType(bpfEvent.Type),
 			}
 			if err != nil {
 				logging.L().Error().Err(err).Msg("decode failed")
@@ -118,6 +125,7 @@ type MemoryLeakResult struct {
 	Leaked     uint64
 	AllocCount uint64
 	FreeCount  uint64
+	StackID    int32
 }
 
 type LeakAggregator struct {
@@ -159,6 +167,7 @@ func (a *LeakAggregator) Consume(
 		case event.MemAlloc:
 			entry.AllocBytes += ev.Bytes
 			entry.AllocCount++
+			entry.StackID = ev.StackID
 
 		case event.MemFree:
 			if ev.Bytes == 0 {
@@ -218,6 +227,7 @@ func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
 			Leaked:     leaked,
 			AllocCount: v.AllocCount,
 			FreeCount:  v.FreeCount,
+			StackID:    v.StackID,
 		})
 	}
 
@@ -250,10 +260,79 @@ func PrintLeakStat(ts time.Time, r MemoryLeakResult) {
 	)
 }
 
-func StartSnapshotPrinter(
+func (t *gpuMemoryTracer) stackPrinter(
 	ctx context.Context,
 	agg *LeakAggregator,
 	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	s := symbolizer.New()
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("stackPrinter stopped")
+			return
+
+		case <-ticker.C:
+			ts := time.Now()
+			results := agg.Snapshot()
+			fmt.Println(ts.Format(time.RFC3339))
+			if len(results) == 0 {
+				fmt.Println("No leaks detected")
+				continue
+			}
+
+			for i, r := range results {
+				if r.StackID < 0 {
+					continue
+				}
+
+				leaked := uint64(0)
+				if r.AllocBytes > r.FreeBytes {
+					leaked = r.AllocBytes - r.FreeBytes
+				}
+				remain := uint64(0)
+				if r.AllocCount > r.FreeCount {
+					remain = r.AllocCount - r.FreeCount
+				}
+
+				fmt.Printf("[%d] PID: %-6d   GPU: %-3d StackID: %-6d  Remaining Blocks: %-6d  TotalBytes: %-10s\n",
+					i+1,
+					r.Key.PID,
+					r.Key.DeviceIndex,
+					r.StackID,
+					remain,
+					internal.HumanBytes(leaked),
+				)
+				stack, err := t.ebpfObjs.getStack(r.StackID)
+				if err != nil {
+					fmt.Printf("Failed to get stack: %v\n", err)
+					continue
+				}
+
+				for frameIdx, addr := range stack {
+					sym, err := s.Resolve(int(r.Key.PID), addr)
+					if err != nil {
+						fmt.Printf("  #%02d  0x%-16x  [unresolved]\n", frameIdx, addr)
+						continue
+					}
+
+					fmt.Printf("  #%02d  0x%-16x  %s\n",
+						frameIdx,
+						addr,
+						sym,
+					)
+				}
+			}
+			fmt.Println()
+		}
+	}
+}
+
+func (t *gpuMemoryTracer) statsPrinter(ctx context.Context, agg *LeakAggregator, interval time.Duration,
 ) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
