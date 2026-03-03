@@ -6,6 +6,7 @@ SPDX="SPDX-License-Identifier: MIT"
 FILES=$(git ls-files \
   '*.go' '*.c' '*.h' '*.sh' '*.py' \
   ':!:vendor/**' \
+  ':!:gen/**' \
   ':!:third_party/**')
 
 missing=0

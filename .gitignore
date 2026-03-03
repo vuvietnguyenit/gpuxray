@@ -53,5 +53,6 @@ go.sum.backup
 *.tmp
 *.log
 vmlinux.h
-bpf_*.go
+*_bpfel.go
 gpuxray
+note.md
