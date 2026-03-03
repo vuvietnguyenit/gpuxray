@@ -15,9 +15,9 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## 2026-02-23
+## 2026-03-03
 
 ### Added
+- Feature show stack traces of PID when it has leaked block 
 
 ### Fixed
-- Fixed incorrect leak calculation when free event size was zero or free event is existed before allocate event.
