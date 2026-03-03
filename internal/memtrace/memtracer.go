@@ -273,7 +273,7 @@ func (t *gpuMemoryTracer) stackPrinter(
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("stackPrinter stopped")
+			logging.L().Debug().Msg("stackPrinter stopped")
 			return
 
 		case <-ticker.C:
@@ -281,7 +281,7 @@ func (t *gpuMemoryTracer) stackPrinter(
 			results := agg.Snapshot()
 			fmt.Println(ts.Format(time.RFC3339))
 			if len(results) == 0 {
-				fmt.Println("No leaks detected")
+				logging.L().Debug().Msg("No leaks detected")
 				continue
 			}
 
