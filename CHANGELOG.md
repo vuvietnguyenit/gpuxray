@@ -15,9 +15,9 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## 2026-03-03
+## 2026-03-04
 
 ### Added
-- Feature show stack traces of PID when it has leaked block 
+- expose Prometheus metrics of GPU usage by PID
 
 ### Fixed
