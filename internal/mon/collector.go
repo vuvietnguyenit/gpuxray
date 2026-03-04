@@ -63,59 +63,100 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.metrics.processCount
 }
 
+// gpuLabel returns a human-readable GPU identifier, preferring the UUID.
+func (c *Collector) gpuLabel(dev nvml.Device, index int) string {
+	uuid, ret := nvml.DeviceGetUUID(dev)
+	if ret == nvml.SUCCESS {
+		return uuid
+	}
+	return fmt.Sprintf("gpu%d", index)
+}
+
+// buildProcessInfo enriches a raw PID with /proc-derived metadata.
+func (c *Collector) buildProcessInfo(pid uint32, gpuLabel string) ProcessInfo {
+	return ProcessInfo{
+		PID:  pid,
+		Comm: procComm(pid),
+		Args: procArgs(pid),
+		GPU:  gpuLabel,
+	}
+}
+
 // Collect implements prometheus.Collector.
 // It is called by Prometheus on every scrape.
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.sess == nil {
-		sess, err := pid.OpenNVMLSession()
-		if err != nil {
-			c.logger.Error().Msgf("Failed to open NVML session: %v", err)
-			return
-		}
-		c.sess = sess
-	}
-
-	inspections, err := pid.GetRunningProcesses(c.sess)
-	if err != nil {
-		c.logger.Error().Msgf("GetRunningProcesses failed: %v", err)
+	deviceCount, ret := nvml.DeviceGetCount()
+	if ret != nvml.SUCCESS {
+		c.logger.Error().Msgf("nvml DeviceGetCount failed: %s", nvml.ErrorString(ret))
 		return
 	}
 
-	for _, insp := range inspections {
-		for _, e := range insp.Errors {
-			c.logger.Warn().Msgf("inspection warning: %v", e)
+	for i := range deviceCount {
+		dev, ret := nvml.DeviceGetHandleByIndex(i)
+		if ret != nvml.SUCCESS {
+			c.logger.Warn().Msgf("DeviceGetHandleByIndex failed: %s", nvml.ErrorString(ret))
+			continue
 		}
+		smUtil, err := c.smUtilForPIDs(dev)
+		fmt.Println("gpu", i, smUtil)
+		if err != nil {
+			c.logger.Warn().Msgf("Failed to get SM utilization: %s", err)
+		}
+		gpuLabel := c.gpuLabel(dev, i)
+		c.collectDevice(ch, dev, gpuLabel, i, smUtil)
+	}
+}
 
-		for _, gpu := range insp.GPUs {
-			labels := buildLabelValues(insp.Process, gpu)
-			// get smUtils for this PID on this GPU
-			smUtils, err := c.smUtilForPIDs(gpu.Device)
-			if err != nil {
-				c.logger.Warn().Msgf("Failed to get SM util for PID %d on GPU %s: %v", insp.Process.PID, gpu.UUID, err)
-				continue
-			}
-			ch <- prometheus.MustNewConstMetric(
-				c.metrics.usedMemoryBytes,
-				prometheus.GaugeValue,
-				float64(gpu.UsedMemBytes),
-				labels...,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				c.metrics.processCount,
-				prometheus.GaugeValue,
-				1,
-				labels...,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				c.metrics.smUtilization,
-				prometheus.GaugeValue,
-				float64(smUtils[insp.Process.PID]),
-				labels...,
-			)
+// collectDevice emits metrics for all processes on a single GPU device.
+func (c *Collector) collectDevice(ch chan<- prometheus.Metric, dev nvml.Device, gpuLabel string, gpuIdx int, smUtil map[uint32]uint32) {
+	procs, ret := nvml.DeviceGetComputeRunningProcesses(dev)
+	if ret != nvml.SUCCESS {
+		c.logger.Warn().Msgf("DeviceGetComputeRunningProcesses failed: %s", nvml.ErrorString(ret))
+		return
+	}
+
+	// Also collect graphics processes (games, Vulkan/OpenGL workloads).
+	gfxProcs, ret := nvml.DeviceGetGraphicsRunningProcesses(dev)
+	if ret == nvml.SUCCESS {
+		procs = append(procs, gfxProcs...)
+	}
+
+	// Deduplicate by PID (a process can appear in both lists).
+	seen := make(map[uint32]struct{})
+	for _, p := range procs {
+		pid := uint32(p.Pid)
+		if _, dup := seen[pid]; dup {
+			continue
 		}
+		seen[pid] = struct{}{}
+
+		info := c.buildProcessInfo(pid, gpuLabel)
+
+		labels := buildLabelValues(info, gpuIdx)
+
+		ch <- prometheus.MustNewConstMetric(
+			c.metrics.usedMemoryBytes,
+			prometheus.GaugeValue,
+			float64(p.UsedGpuMemory),
+			labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			c.metrics.processCount,
+			prometheus.GaugeValue,
+			1,
+			labels...,
+		)
+
+		// Per-process SM util (driver >= r470 required).
+		ch <- prometheus.MustNewConstMetric(
+			c.metrics.smUtilization,
+			prometheus.GaugeValue,
+			float64(smUtil[pid]),
+			labels...,
+		)
 	}
 }
 
@@ -123,7 +164,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 func (c *Collector) smUtilForPIDs(dev nvml.Device) (map[uint32]uint32, error) {
 	samples, ret := nvml.DeviceGetProcessUtilization(dev, c.lastSeen)
 	if ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("nvml error: %v", ret)
+		if ret != nvml.ERROR_NOT_FOUND { // this is not error
+			return nil, fmt.Errorf("nvml error: %v", ret)
+		}
 	}
 	result := make(map[uint32]uint32)
 
@@ -143,12 +186,12 @@ func (c *Collector) smUtilForPIDs(dev nvml.Device) (map[uint32]uint32, error) {
 }
 
 // buildLabelValues returns the ordered label value slice matching metricLabels.
-func buildLabelValues(info pid.USProcessInfo, gpu pid.GPUUsage) []string {
+func buildLabelValues(info ProcessInfo, gpuIdx int) []string {
 	return []string{
 		strconv.FormatUint(uint64(info.PID), 10),
 		info.Comm,
 		info.Args,
-		gpu.UUID,
-		strconv.FormatInt(int64(gpu.DeviceIndex), 10),
+		info.GPU,
+		strconv.FormatInt(int64(gpuIdx), 10),
 	}
 }

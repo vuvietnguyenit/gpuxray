@@ -19,17 +19,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// PIDResolver maps a PID to optional Kubernetes metadata.
-// Implement this interface to plug in a real k8s resolver.
-type PIDResolver interface {
-	// Resolve attempts to return PodInfo for the given PID.
-	// Returns nil, nil when the PID is not found in any pod.
-}
-
-// NoopResolver is the default resolver that returns nothing.
-// Replace with a real implementation (e.g. via /proc + cgroup inspection) when needed.
-type NoopResolver struct{}
-
 // Config holds all tunables for the monitor server.
 type Config struct {
 	// ListenAddr is the TCP address for the HTTP metrics server,
