@@ -26,7 +26,7 @@
             "preLaunchTask": "make: build",
             "args": [
                 "memtrace",
-                "--pid", "693204"
+                "--pid", "2289395"
             ]
         },
         {
@@ -38,8 +38,19 @@
             "preLaunchTask": "make: build",
             "args": [
                 "memtrace",
-                "--pid", "693204",
+                "--pid", "2289395",
                 "--print-stacks"
+            ]
+        },
+        {
+            "name": "Run mon flag",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/main.go",
+            "preLaunchTask": "make: build",
+            "args": [
+                "mon",
             ]
         }
     ]
