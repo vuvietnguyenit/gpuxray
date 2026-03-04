@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // nvmlDevice is a resolved GPU handle with its static metadata attached.
 package pid
 

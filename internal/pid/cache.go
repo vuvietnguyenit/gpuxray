@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 // simplified just create a map and store inspections on it witk key as pid
 package pid
 
