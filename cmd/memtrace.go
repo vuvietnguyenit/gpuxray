@@ -12,7 +12,7 @@ import (
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
 )
 
-func NewCmd() *cobra.Command {
+func newMemtraceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "memtrace",
 		Short: "Trace GPU memory activity",
@@ -28,7 +28,7 @@ func NewCmd() *cobra.Command {
 }
 
 func init() {
-	rootCmd.AddCommand(NewCmd())
+	rootCmd.AddCommand(newMemtraceCmd())
 }
 
 var wg sync.WaitGroup

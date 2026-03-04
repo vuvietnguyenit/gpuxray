@@ -15,3 +15,10 @@ var FetchInterval int
 var CudaSo string
 var LogLevel string
 var LogFormat string
+
+type MonitorFlags struct {
+	Port string
+	Path string
+}
+
+var MonFlags MonitorFlags

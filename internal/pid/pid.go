@@ -6,14 +6,12 @@ package pid
 
 import (
 	"debug/elf"
-	"fmt"
 	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/prometheus/procfs"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/vuvietnguyenit/gpuxray/internal"
-	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 )
 
 func getCUDASharedObject(pid int) ([]string, error) {
@@ -58,8 +56,11 @@ type USProcessInfo struct {
 }
 
 type GPUUsage struct {
-	DeviceIndex int
-	UUID        string
+	DeviceIndex  int
+	UUID         string
+	Device       nvml.Device
+	UsedMemBytes uint64 // bytes of GPU VRAM consumed
+	SMUtil       uint32 // SM utilisation 0-100 (driver ≥ r470; else 0)
 }
 
 type PIDInspection struct {
@@ -70,27 +71,24 @@ type PIDInspection struct {
 
 type ListProcess []USProcessInfo
 
-// get properties of a process given its PID and device ID. Inpsect to PID to get more infomation of process
-func inspectProc(pid uint32) (USProcessInfo, error) {
+// getProcInfo retrieves properties of a process given its PID. It inspects the PID
+// to get process information such as name and command line arguments.
+// If resolveCUDA is true, it will also resolve any CUDA shared objects linked to the process.
+func getProcInfo(pid uint32, resolveCUDA bool) (USProcessInfo, error) {
 	p, err := process.NewProcess(int32(pid))
 	if err != nil {
-		logging.L().Error().
-			Int("pid", int(p.Pid)).
-			Err(err).
-			Msg("failed to get process info")
-
 		return USProcessInfo{}, err
 	}
+
 	comm, _ := p.Name()
 	args, _ := p.Cmdline()
-	cudaLibs, err := getCUDASharedObject(int(pid))
-	if err != nil {
-		logging.L().Error().
-			Int("pid", int(p.Pid)).
-			Err(err).
-			Msg("failed to get CUDA shared objects")
 
-		return USProcessInfo{}, err
+	var cudaLibs []string
+	if resolveCUDA {
+		cudaLibs, err = getCUDASharedObject(int(pid))
+		if err != nil {
+			return USProcessInfo{}, err
+		}
 	}
 	return USProcessInfo{
 		PID:      uint32(pid),
@@ -100,110 +98,48 @@ func inspectProc(pid uint32) (USProcessInfo, error) {
 	}, nil
 }
 
-func inspectGPUUsage(pid uint32) ([]GPUUsage, error) {
-	var usages []GPUUsage
-
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("nvml.Init: %s", nvml.ErrorString(ret))
-	}
-	defer nvml.Shutdown()
-
-	count, ret := nvml.DeviceGetCount()
-	if ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("nvml.DeviceGetCount: %s", nvml.ErrorString(ret))
-	}
-
-	for i := range count {
-		device, ret := nvml.DeviceGetHandleByIndex(i)
-		if ret != nvml.SUCCESS {
-			continue
-		}
-
-		uuid, _ := device.GetUUID()
-
-		procs, ret := device.GetComputeRunningProcesses()
-		if ret != nvml.SUCCESS {
-			continue
-		}
-
-		for _, p := range procs {
-			if p.Pid == pid {
-				usages = append(usages, GPUUsage{
-					DeviceIndex: i,
-					UUID:        uuid,
-				})
-			}
-		}
-	}
-
-	return usages, nil
-}
-
 func InspectPID(pid uint32) *PIDInspection {
 	result := PIDInspection{}
 
-	proc, err := inspectProc(pid)
+	proc, err := getProcInfo(pid, true)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		return &result
 	}
 	result.Process = proc
-	gpus, err := inspectGPUUsage(pid)
+	sess, err := OpenNVMLSession()
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
+		return &result
 	}
-	result.GPUs = gpus
+	defer sess.Close()
+	result.GPUs = sess.gpuUsageForPID(pid)
 	return &result
 }
 
-// GetRunningProcesses returns all PIDs using CUDA
-func GetRunningProcesses() (ListPIDInspection, error) {
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("nvml init failed: %s", nvml.ErrorString(ret))
-	}
-	defer nvml.Shutdown()
-
-	count, ret := nvml.DeviceGetCount()
-	if ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("DeviceGetCount: %s", nvml.ErrorString(ret))
-	}
-
-	gpuPIDs := make(map[uint32]struct{})
-
-	for i := range count {
-		dev, ret := nvml.DeviceGetHandleByIndex(i)
-		if ret != nvml.SUCCESS {
-			logging.L().Error().
-				Int("device_index", i).
-				Int("nvml_ret", int(ret)).
-				Str("nvml_error", nvml.ErrorString(ret)).
-				Msg("nvml DeviceGetHandleByIndex failed")
-
-			continue
+// GetRunningProcesses returns an inspection for every PID currently using a GPU.
+//
+// When sess is non-nil the provided session is reused (lastSeen advances across
+// calls — correct for the long-lived Collector use-case).
+// When sess is nil a temporary session is opened and closed internally
+// (suitable for one-shot CLI / diagnostic calls).
+func GetRunningProcesses(sess *NvmlSession) (ListPIDInspection, error) {
+	pids := sess.AllPIDs()
+	results := make(ListPIDInspection, 0, len(pids))
+	for pid := range pids {
+		insp := PIDInspection{
+			GPUs: sess.gpuUsageForPID(pid),
 		}
 
-		procs, ret := dev.GetComputeRunningProcesses()
-		if ret != nvml.SUCCESS {
-			logging.L().Error().
-				Int("nvml_ret", int(ret)).
-				Str("nvml_error", nvml.ErrorString(ret)).
-				Msg("nvml GetComputeRunningProcesses failed")
-
-			continue
+		proc, err := getProcInfo(pid, true)
+		if err != nil {
+			insp.Errors = append(insp.Errors, err.Error())
+		} else {
+			insp.Process = proc
 		}
 
-		for _, p := range procs {
-			gpuPIDs[p.Pid] = struct{}{}
-		}
+		results = append(results, insp)
 	}
-
-	results := make([]PIDInspection, 0, len(gpuPIDs))
-	for pid := range gpuPIDs {
-		results = append(results, *InspectPID(pid))
-	}
-
 	return results, nil
 }
 
