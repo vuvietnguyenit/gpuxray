@@ -77,7 +77,9 @@ func (m *Monitor) Run(ctx context.Context) error {
 	}
 
 	// ── Prometheus registry ───────────────────────────────────────────────
-	reg := prometheus.NewRegistry()
+	baseReg := prometheus.NewRegistry()
+	reg := prometheus.WrapRegistererWith(BuildConstLabels(), baseReg)
+
 	// Standard Go runtime + process metrics.
 	reg.MustRegister(collectors.NewGoCollector())
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -88,7 +90,7 @@ func (m *Monitor) Run(ctx context.Context) error {
 
 	// ── HTTP server ───────────────────────────────────────────────────────
 	mux := http.NewServeMux()
-	metricsHandler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+	metricsHandler := promhttp.HandlerFor(baseReg, promhttp.HandlerOpts{
 		EnableOpenMetrics: true,
 	})
 	mux.HandleFunc(m.cfg.MetricsPath, func(w http.ResponseWriter, r *http.Request) {
