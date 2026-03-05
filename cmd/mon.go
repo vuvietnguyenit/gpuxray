@@ -25,7 +25,7 @@ func newMonCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&internal.MonFlags.Port, "port", ":2112", "Port to expose metrics")
 	cmd.Flags().StringVar(&internal.MonFlags.Path, "path", "/metrics", "Path to expose metrics")
-	// cmd.Flags().BoolVarP(&internal.MonFlags.UseK8s, "use-k8s", "k", false, "Use Kubernetes integration")
+	cmd.Flags().BoolVar(&internal.MonFlags.K8s, "k8s", false, "Declare it if you run gpuxray in Kubernetes")
 
 	return cmd
 }

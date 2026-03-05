@@ -19,6 +19,7 @@ var LogFormat string
 type MonitorFlags struct {
 	Port string
 	Path string
+	K8s  bool
 }
 
 var MonFlags MonitorFlags
