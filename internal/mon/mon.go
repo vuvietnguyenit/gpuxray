@@ -7,9 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
@@ -39,14 +37,8 @@ type Config struct {
 
 func (c *Config) defaults() {
 	if c.Logger == nil {
-		var out io.Writer = os.Stderr
-		l := zerolog.New(
-			zerolog.ConsoleWriter{
-				Out:        out,
-				TimeFormat: "15:04:05",
-			},
-		).With().Timestamp().Logger()
-		c.Logger = &l
+		panic("need configurate logger")
+
 	}
 	if c.Resolver == nil {
 		c.Resolver = &NoopResolver{}
