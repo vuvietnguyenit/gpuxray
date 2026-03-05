@@ -16,6 +16,20 @@ VMLINUX_BTF := /sys/kernel/btf/vmlinux
 
 all: generate build
 
+vmlinux:
+	@echo "Generating vmlinux.h from BTF..."
+	@if [ ! -f $(VMLINUX_BTF) ]; then \
+		echo "Error: BTF not found at $(VMLINUX_BTF)"; \
+		echo "Your kernel may not have BTF support enabled"; \
+		exit 1; \
+	fi
+	@if ! command -v bpftool > /dev/null; then \
+		echo "Error: bpftool not found. Please install it."; \
+		exit 1; \
+	fi
+	bpftool btf dump file $(VMLINUX_BTF) format c > $(EBPF_PROG_FOLDER)/$(VMLINUX_H)
+	@echo "✓ Generated $(VMLINUX_H)"
+
 # Generate Go bindings from eBPF code
 generate: vmlinux
 	@echo "Generating eBPF Go bindings..."
