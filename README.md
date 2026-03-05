@@ -15,6 +15,7 @@ Welcome to anyone who want to contribute to this project.
 ## Notice
 - At this time, this tool just inspect PID that is use by CUDA driver API, if PID is using by CUDA runtime API, it can be omit.
 - Require kernel version >= 5.6. The Linux kernel in range 6.x is perfect.
+- It only works with `amd64` CPU arch
 
 ## Quickstart
 ### Run GPU exporter
