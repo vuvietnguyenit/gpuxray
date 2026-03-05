@@ -3,7 +3,31 @@
 
 package mon
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"fmt"
+	"os"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/vuvietnguyenit/gpuxray/internal"
+)
+
+func BuildConstLabels() prometheus.Labels {
+	var hostname string
+	var err error
+
+	hostname, err = os.Hostname()
+	if err != nil {
+		panic(fmt.Sprintf("get hostname: %v", err))
+	}
+
+	if internal.MonFlags.K8s {
+		hostname = os.Getenv("HOSTNAME")
+
+	}
+	return prometheus.Labels{
+		"hostname": hostname,
+	}
+}
 
 // pidMetricLabels are the common label names attached to every metric.
 var pidMetricLabels = []string{

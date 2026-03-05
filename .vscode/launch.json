@@ -51,6 +51,7 @@
             "preLaunchTask": "make: build",
             "args": [
                 "mon",
+                "--log-level", "debug",
             ]
         }
     ]

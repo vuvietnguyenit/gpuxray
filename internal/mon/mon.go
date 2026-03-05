@@ -77,7 +77,9 @@ func (m *Monitor) Run(ctx context.Context) error {
 	}
 
 	// ── Prometheus registry ───────────────────────────────────────────────
-	reg := prometheus.NewRegistry()
+	baseReg := prometheus.NewRegistry()
+	reg := prometheus.WrapRegistererWith(BuildConstLabels(), baseReg)
+
 	// Standard Go runtime + process metrics.
 	reg.MustRegister(collectors.NewGoCollector())
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -88,9 +90,23 @@ func (m *Monitor) Run(ctx context.Context) error {
 
 	// ── HTTP server ───────────────────────────────────────────────────────
 	mux := http.NewServeMux()
-	mux.Handle(m.cfg.MetricsPath, promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+	metricsHandler := promhttp.HandlerFor(baseReg, promhttp.HandlerOpts{
 		EnableOpenMetrics: true,
-	}))
+	})
+	mux.HandleFunc(m.cfg.MetricsPath, func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		m.cfg.Logger.Debug().
+			Str("remote", r.RemoteAddr).
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Msg("prometheus scrape started")
+
+		metricsHandler.ServeHTTP(w, r)
+
+		m.cfg.Logger.Debug().
+			Dur("duration", time.Since(start)).
+			Msg("prometheus scrape finished")
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
