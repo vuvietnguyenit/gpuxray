@@ -8,7 +8,7 @@ This tool is inspired by [pidstat](https://man7.org/linux/man-pages/man1/pidstat
 Welcome to anyone who want to contribute to this project.
 
 ## Usecases
-- Work well to tracing and get stats of process is using GPU resource (ML jobs, AI jobs) by print it to console.
+- Work well to tracing and get stats of process is using GPU resources through CUDA API (it can be ML jobs, AI jobs, etc.).
 - Expose the Prometheus metrics of GPU resource that is corresponding with PID. 
 - Very convinient to detect GPU memory leaked. It can show stacktraces in memory-leaked blocks in GPU. It will expose the function that isn't freed in memory.
 
@@ -25,6 +25,20 @@ Easily install gpuxray just by one command
 curl -s https://raw.githubusercontent.com/vuvietnguyenit/gpuxray/main/install.sh | sh
 ```
 ### Docker
+
+Run as exporter option:
+
+```sh
+docker run --rm --gpus all --pid=host -p 2112:2112 ghcr.io/vuvietnguyenit/gpuxray:latest mon
+```
+
+Run as tracing tool:
+```sh
+docker run --privileged --rm --gpus all --pid=host \
+  -v /sys/kernel/debug:/sys/kernel/debug \
+  -v /sys/kernel/tracing:/sys/kernel/tracing \
+  ghcr.io/vuvietnguyenit/gpuxray:latest memtrace -p 1690251 -i 1
+```
 ...
 
 ## Quickstart
@@ -34,6 +48,7 @@ Run command:
 ```sh
 # gpuxray mon
 ```
+The defination of metrics is declared at: [metrics.txt](./metrics.txt)
 <details>
 <summary>Example result</summary>
 
@@ -96,6 +111,7 @@ TIME       PID      GPU  INUSE_MB     AL_CNT   FR_CNT   COMM
 15:58:49   332361   0    1.00 KiB     566      564      python3         
 ^C2026/03/04 15:58:50 Received signal, exiting..
 ```
+The meaning of each columns printed, please use `./gpuxray memtrace -h` flag to see more information
 
 ### Show memory-leaked stacktraces
 
