@@ -31,10 +31,7 @@ archives:
     name_template: >-
       {{ .ProjectName }}_
       {{- .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
+      {{ .Arch }}
     # use zip for windows archives
     format_overrides:
       - goos: windows
@@ -43,23 +40,21 @@ archives:
 
 dockers:
   - image_templates:
-      - "vuvietnguyenit/gpuxray:{{ .Tag }}-amd64"
-      - "vuvietnguyenit/gpuxray:latest-amd64"
+      - "ghcr.io/vuvietnguyenit/gpuxray:{{ .Tag }}-amd64"
+      - "ghcr.io/vuvietnguyenit/gpuxray:latest-amd64"
     dockerfile: Dockerfile
     goos: linux
     goarch: amd64
 
 
 docker_manifests:
-  - name_template: vuvietnguyenit/gpuxray:{{ .Tag }}
+  - name_template: ghcr.io/vuvietnguyenit/gpuxray:{{ .Tag }}
     image_templates:
-      - vuvietnguyenit/gpuxray:{{ .Tag }}-amd64
-      - vuvietnguyenit/gpuxray:{{ .Tag }}-arm64
+      - ghcr.io/vuvietnguyenit/gpuxray:{{ .Tag }}-amd64
 
-  - name_template: vuvietnguyenit/gpuxray:latest
+  - name_template: ghcr.io/vuvietnguyenit/gpuxray:latest
     image_templates:
-      - vuvietnguyenit/gpuxray:latest-amd64
-      - vuvietnguyenit/gpuxray:latest-arm64
+      - ghcr.io/vuvietnguyenit/gpuxray:latest-amd64
 
 changelog:
   sort: asc
