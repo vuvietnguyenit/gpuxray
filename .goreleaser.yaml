@@ -10,10 +10,15 @@ version: 1
 
 before:
   hooks:
-    - make build
+    - go mod tidy
+    - make vmlinux
+    - make generate
 
 builds:
-  - env:
+  - id: gpuxray
+    main: ./main.go
+    binary: gpuxray
+    env:
       - CGO_ENABLED=1
     goos:
       - linux
@@ -34,6 +39,27 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+
+
+dockers:
+  - image_templates:
+      - "vuvietnguyenit/gpuxray:{{ .Tag }}-amd64"
+      - "vuvietnguyenit/gpuxray:latest-amd64"
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+
+
+docker_manifests:
+  - name_template: vuvietnguyenit/gpuxray:{{ .Tag }}
+    image_templates:
+      - vuvietnguyenit/gpuxray:{{ .Tag }}-amd64
+      - vuvietnguyenit/gpuxray:{{ .Tag }}-arm64
+
+  - name_template: vuvietnguyenit/gpuxray:latest
+    image_templates:
+      - vuvietnguyenit/gpuxray:latest-amd64
+      - vuvietnguyenit/gpuxray:latest-arm64
 
 changelog:
   sort: asc
