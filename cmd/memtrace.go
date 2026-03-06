@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vuvietnguyenit/gpuxray/internal"
-	"github.com/vuvietnguyenit/gpuxray/internal/lifecycle"
 	"github.com/vuvietnguyenit/gpuxray/internal/logging"
 	"github.com/vuvietnguyenit/gpuxray/internal/memtrace"
 	"github.com/vuvietnguyenit/gpuxray/internal/pid"
@@ -80,9 +79,6 @@ func runMemtrace(cmd *cobra.Command, _ []string) error {
 			}
 		}()
 	}
-	wg.Go(func() {
-		lifecycle.TraceProcessExit(ctx)
-	})
 	err = memtrace.Run(ctx, objs, cfg)
 	if err != nil {
 		return err
