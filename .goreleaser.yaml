@@ -16,7 +16,7 @@ before:
 
 builds:
   - id: gpuxray
-    main: ./main.go
+    main: .
     binary: gpuxray
     env:
       - CGO_ENABLED=1
