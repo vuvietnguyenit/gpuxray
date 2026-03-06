@@ -13,7 +13,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN make build
+RUN go build -o gpuxray .
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim
