@@ -48,7 +48,6 @@ dockers:
     dockerfile: Dockerfile
     goos: linux
     goarch: amd64
-    use: buildx
 
 
 docker_manifests:

@@ -1,14 +1,12 @@
-.PHONY: all build generate test clean install-deps vmlinux check help
+.PHONY: all vmlinux generate clean clean
 
 # Variables
 GO := go
 BINARY := gpuxray
-ARCH := $(shell uname -m)
 
 # eBPF related
 VMLINUX_H := vmlinux.h
 EBPF_PROG_FOLDER := ./internal/bpf/headers
-APP_FOLDER := ./internal/app
 VMLINUX_BTF := /sys/kernel/btf/vmlinux
 
 vmlinux:
@@ -37,7 +35,7 @@ clean:
 	rm -f $(BINARY)
 	rm -f $(EBPF_PROG_FOLDER)/$(VMLINUX_H)
 	$(GO) clean
-	
+
 	@echo "Cleaning generated files in gen/ folders..."
 	find . -type d -name "gen" -exec find {} -type f ! -name ".gitkeep" -delete \;
 
