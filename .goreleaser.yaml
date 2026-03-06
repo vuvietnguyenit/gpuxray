@@ -11,8 +11,8 @@ version: 1
 before:
   hooks:
     - make vmlinux
-    - go mod tidy
     - make generate
+    - go mod tidy
 
 builds:
   - id: gpuxray
