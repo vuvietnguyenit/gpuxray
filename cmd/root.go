@@ -32,7 +32,7 @@ func removeMemlock() error {
 
 var rootCmd = &cobra.Command{
 	Use:   "gpuxray",
-	Short: "eBPF tool this help tracing and investigating GPU",
+	Short: "GPU observability and tracing tool for Linux",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// DEBUG purpose
