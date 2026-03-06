@@ -17,6 +17,16 @@ Welcome to anyone who want to contribute to this project.
 - Require kernel version >= 5.6. The Linux kernel in range 6.x is perfect.
 - It only works with `amd64` CPU arch
 
+## Install
+
+### Binary
+Easily install gpuxray just by one command
+```sh
+curl -s https://raw.githubusercontent.com/vuvietnguyenit/gpuxray/main/install.sh | sh
+```
+### Docker
+...
+
 ## Quickstart
 ### Run GPU exporter
 When you run GPU exporter, it will expose the metric that is related to PID is running in GPU server.
