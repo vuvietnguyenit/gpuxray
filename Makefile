@@ -29,6 +29,11 @@ generate: vmlinux
 	$(GO) generate ./...
 	@echo "✓ Generated eBPF bindings"
 
+# Build the Go binary
+build: generate
+	@echo "Building $(BINARY)..."
+	$(GO) build -o $(BINARY) .
+	@echo "✓ Build complete"
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."

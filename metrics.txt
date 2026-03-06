@@ -1,0 +1,97 @@
+GPU Exporter Metrics
+==================================
+
+------------------------------------------------------------
+gpu_free_memory_bytes
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Remaining available GPU memory in bytes for the GPU device.
+
+Labels:
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
+
+------------------------------------------------------------
+gpu_process_active
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Indicates that a process is currently using a GPU.
+The metric value is always 1 for active processes.
+
+Each time series represents a process running on a specific GPU.
+
+Labels:
+- pid        : Process ID.
+- comm       : Process command name.
+- args       : Full command-line arguments of the process.
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
+
+------------------------------------------------------------
+gpu_process_sm_utilization_percent
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Streaming Multiprocessor (SM) utilization percentage for a GPU process.
+Values range from 0 to 100.
+
+Note:
+This metric requires NVIDIA drivers with NVML r470+.
+If the driver version does not support this API, the value will be 0.
+
+Labels:
+- pid        : Process ID.
+- comm       : Process command name.
+- args       : Full command-line arguments of the process.
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
+
+------------------------------------------------------------
+gpu_process_used_memory_bytes
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Amount of GPU memory consumed by a specific process in bytes.
+
+Labels:
+- pid        : Process ID.
+- comm       : Process command name.
+- args       : Full command-line arguments of the process.
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
+
+------------------------------------------------------------
+gpu_total_memory_bytes
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Total memory available on the GPU device in bytes.
+
+Labels:
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
+
+------------------------------------------------------------
+gpu_used_memory_bytes
+------------------------------------------------------------
+Type: gauge
+
+Description:
+Total GPU memory currently allocated across all processes in bytes.
+
+Labels:
+- gpu        : GPU UUID.
+- gpu_index  : GPU index on the host.
+- hostname   : Hostname of the node where the GPU is installed.
