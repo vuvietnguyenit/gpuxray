@@ -21,9 +21,6 @@ enum event_type {
   EVENT_MALLOC_MANAGED = 4,
 };
 
-/* =========================
- * Stack trace map
- * ========================= */
 struct {
   __uint(type, BPF_MAP_TYPE_STACK_TRACE);
   __uint(max_entries, 16384);
@@ -31,9 +28,6 @@ struct {
   __uint(value_size, sizeof(u64) * PERF_MAX_STACK_DEPTH);
 } stack_traces SEC(".maps");
 
-/* =========================
- * Event struct
- * ========================= */
 struct cu_mem_alloc_event {
   u32 pid;
   u32 tid;
@@ -45,17 +39,11 @@ struct cu_mem_alloc_event {
   u64 device_ptr;
 };
 
-/* =========================
- * Ring buffer
- * ========================= */
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, 1 << 24);
 } memleak_ringbuf_events SEC(".maps");
 
-/* =========================
- * Active allocations map
- * ========================= */
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, 10240);
@@ -63,9 +51,6 @@ struct {
   __type(value, u64);
 } active_allocs SEC(".maps");
 
-/* =========================
- * Temp malloc storage
- * ========================= */
 struct malloc_info {
   u64 size;
   u64 devptr_addr;
@@ -78,9 +63,6 @@ struct {
   __type(value, struct malloc_info);
 } malloc_temp SEC(".maps");
 
-/* =========================
- * Helpers
- * ========================= */
 static __always_inline int should_trace(void) {
   if (target_pid == 0)
     return 1; // trace all if not set (optional behavior)
@@ -99,9 +81,6 @@ populate_event_common(struct cu_mem_alloc_event *event) {
   event->timestamp = bpf_ktime_get_ns();
 }
 
-/* =========================
- * cuMemAlloc
- * ========================= */
 SEC("uprobe/cuMemAlloc")
 int BPF_UPROBE(trace_cu_mem_malloc_entry, void **devPtr, u64 size) {
   if (!should_trace())
@@ -156,9 +135,6 @@ cleanup:
   return 0;
 }
 
-/* =========================
- * cuMemFree
- * ========================= */
 SEC("uprobe/cuMemFree")
 int BPF_UPROBE(trace_cu_mem_free, void *devPtr) {
   if (!should_trace())
@@ -188,9 +164,6 @@ int BPF_UPROBE(trace_cu_mem_free, void *devPtr) {
   return 0;
 }
 
-/* =========================
- * cuMemAllocManaged
- * ========================= */
 SEC("uprobe/cuMemAllocManaged")
 int BPF_UPROBE(trace_cu_mem_malloc_managed_entry, void **devPtr, u64 size,
                unsigned int flags) {

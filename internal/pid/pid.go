@@ -52,6 +52,7 @@ type USProcessInfo struct {
 	PID      uint32
 	Comm     string
 	Args     string
+	Username string
 	CUDALibs []string
 }
 
@@ -82,6 +83,7 @@ func getProcInfo(pid uint32, resolveCUDA bool) (USProcessInfo, error) {
 
 	comm, _ := p.Name()
 	args, _ := p.Cmdline()
+	username, _ := p.Username()
 
 	var cudaLibs []string
 	if resolveCUDA {
@@ -94,6 +96,7 @@ func getProcInfo(pid uint32, resolveCUDA bool) (USProcessInfo, error) {
 		PID:      uint32(pid),
 		Comm:     comm,
 		Args:     args,
+		Username: username,
 		CUDALibs: cudaLibs,
 	}, nil
 }
