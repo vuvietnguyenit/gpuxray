@@ -1,54 +1,92 @@
 # GPUXRAY
 
-The opensource debugging and monitoring for GPU server.
-This tool will help troubleshooting problem that is related to GPU resources with each process is running on server.
-Some functions are implemented in this tool was used by eBPF.
-This tool is inspired by [pidstat](https://man7.org/linux/man-pages/man1/pidstat.1.html) but for GPU.
+![GitHub release](https://img.shields.io/github/v/release/vuvietnguyenit/gpuxray)
+![Go Version](https://img.shields.io/github/go-mod/go-version/vuvietnguyenit/gpuxray)
+![License](https://img.shields.io/github/license/vuvietnguyenit/gpuxray)
+![Docker Pulls](https://img.shields.io/github/actions/workflow/status/vuvietnguyenit/gpuxray/release.yml)
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/gpuxray-dark.svg">
+    <img src="./docs/assets/gpuxray-light.svg" width="420">
+  </picture>
+</p>
+
+
+An opensource observability tool for debugging GPU workloads on Linux servers.
+
+It traces CUDA activity using eBPF and provides:
+- per-process GPU metrics
+- GPU memory leak detection
+- Prometheus metrics for monitoring systems
+This tool is inspired by [pidstat](https://man7.org/linux/man-pages/man1/pidstat.1.html) but designed for GPU monitoring.
+GPUXRAY is designed for AI/ML workloads running on GPU servers.
 
 Welcome to anyone who want to contribute to this project.
 
+### Why use gpuxray?
+- `gpuxray` provides GPU observability at the process level, which is not fully supported by [DCGM exporter](https://github.com/NVIDIA/dcgm-exporter). It also leverages eBPF to perform deeper tracing of GPU workloads.
+- It leverages eBPF to trace CUDA activity from the kernel, enabling low-overhead and deep tracing of GPU workloads.
+
 ## Usecases
-- Work well to tracing and get stats of process is using GPU resources through CUDA API (it can be ML jobs, AI jobs, etc.).
-- Expose the Prometheus metrics of GPU resource that is corresponding with PID. 
-- Very convinient to detect GPU memory leaked. It can show stacktraces in memory-leaked blocks in GPU. It will expose the function that isn't freed in memory.
+- Works well for tracing and get stats from processes that use GPU resources through the CUDA API (e.g., ML jobs, AI workloads).
+- Exposes Prometheus metrics fpr GPU resources associated with each PID.
+- Very convinient for detecting GPU memory leaked. It can show stack traces of leaked GPU memory blocks and identify the CUDA functions responsible for allocations that were not freed.
 
 ## Notice
-- At this time, this tool just inspect PID that is use by CUDA driver API, if PID is using by CUDA runtime API, it can be omit.
-- Require kernel version >= 5.6. The Linux kernel in range 6.x is perfect.
-- It only works with `amd64` CPU arch
+- Currently, this tool only inspects PIDs that use the CUDA Driver API. Processes that use the CUDA Runtime API may be omitted.
+- Requires Linux kernel version >= 5.6. Kernel versions in the 6.x series are recommended.
+- Currently supports only the `amd64` CPU architecture.
+
+## Architecture
+
+GPUXRAY collects GPU information using multiple techniques:
+
+1. **NVML** – retrieves GPU metrics per process
+2. **eBPF** – traces CUDA calls
+3. **Go exporter** – exposes metrics for Prometheus
+
 
 ## Install
 
 ### Binary
-Easily install gpuxray just by one command
+Install gpuxray easily with one command:
 ```sh
 curl -s https://raw.githubusercontent.com/vuvietnguyenit/gpuxray/main/install.sh | sh
 ```
 ### Docker
 
-Run as exporter option:
+`gpuxray` could be run as container that use to trace processes are running in the host. Simply pull the image and start the container.
+#### Run as Prometheus exporter
 
 ```sh
 docker run --rm --gpus all --pid=host -p 2112:2112 ghcr.io/vuvietnguyenit/gpuxray:latest mon
 ```
 
-Run as tracing tool:
+#### Run as tracing tool
 ```sh
 docker run --privileged --rm --gpus all --pid=host \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/kernel/tracing:/sys/kernel/tracing \
   ghcr.io/vuvietnguyenit/gpuxray:latest memtrace -p 1690251 -i 1
 ```
-...
+
+### Build from source
+
+```sh
+git clone https://github.com/vuvietnguyenit/gpuxray
+cd gpuxray
+go build -o gpuxray
+```
 
 ## Quickstart
 ### Run GPU exporter
-When you run GPU exporter, it will expose the metric that is related to PID is running in GPU server.
-Run command:
+
+Running the exporter exposes metrics related to processes using GPU resources on the server.
 ```sh
 # gpuxray mon
 ```
-The defination of metrics is declared at: [metrics.txt](./metrics.txt)
+Metric definitions are available in: [metrics.txt](./metrics.txt)
 <details>
 <summary>Example result</summary>
 
@@ -89,9 +127,9 @@ gpu_used_memory_bytes{gpu="GPU-47def375-4603-e5fa-82d3-c7cddc81e65a",gpu_index="
 ```
 </details>
 
-### Run memory stat
+### Memory statistics
 
-This will report stat of GPU's memory usage. For example:
+This command reports statistics about GPU memory usage.
 ```sh
 # ./gpuxray memtrace -p 2806854
 TIME       PID      USER     GPU  INUSE_MB     AL_CNT   FR_CNT   COMM            
@@ -102,11 +140,11 @@ TIME       PID      USER     GPU  INUSE_MB     AL_CNT   FR_CNT   COMM
 12:03:44   2806854  root     0    1.00 KiB     994      992      python3         
 12:03:49   2806854  root     0    2.00 KiB     1197     1193     python3    
 ```
-The meaning of each columns printed, please use `./gpuxray memtrace -h` flag to see more information
+To see the meaning of each column, run: `./gpuxray memtrace -h` flag to see more information
 
 ### Show memory-leaked stacktraces
 
-Used to print stack trace that is making memory leaked.
+This command prints stack traces responsible for leaked GPU memory allocations.
 
 ```sh
 # ./gpuxray memtrace -p 332361 -i 1 --print-stacks
@@ -135,7 +173,7 @@ Used to print stack trace that is making memory leaked.
 ```
 ## Debugging
 
-Enable debug mode to help indicate the issues in this tool. Consider `--log-level debug` flag.
+Enable debug mode to help diagnose issues. `--log-level debug` flag.
 It could help print the metrics of GPU process to the console. Like this:
 
 ```sh
@@ -153,6 +191,11 @@ It could help print the metrics of GPU process to the console. Like this:
 11:32:32 DBG process 3112 (gnome-shell) on GPU 0: used_memory=11296768 sm_util=0%
 11:32:32 DBG prometheus scrape finished duration=3.039056
 ```
-It will convinient to help trace centralize stat of all scaper (client ip, duration time, ...) that is scraping in a place.
 
-Or, it can be print all action that is happening when run `memtrace` feature
+This mode helps observe:
+- GPU metrics collection
+- active GPU processes
+- Prometheus scrape activity (client IP, duration, etc.)
+- internal tracing events
+
+It can also display detailed actions when running the `memtrace` feature.

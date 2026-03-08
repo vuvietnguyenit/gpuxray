@@ -1,0 +1,25 @@
+<svg width="420" height="120" viewBox="0 0 420 120" xmlns="http://www.w3.org/2000/svg">
+
+<!-- GPU card -->
+<rect x="10" y="35" width="90" height="50" rx="6" fill="#1f2937"></rect>
+
+<!-- GPU fan -->
+<circle cx="40" cy="60" r="14" fill="#16a34a"></circle>
+<circle cx="40" cy="60" r="6" fill="#1f2937"></circle>
+
+<!-- GPU connector -->
+<rect x="100" y="55" width="10" height="10" fill="#16a34a"></rect>
+
+<!-- Magnifying glass -->
+<circle cx="85" cy="60" r="22" stroke="#16a34a" stroke-width="6" fill="none"></circle>
+<line x1="100" y1="75" x2="120" y2="95" stroke="#16a34a" stroke-width="6" stroke-linecap="round"></line>
+
+<!-- Chip inside magnifier -->
+<rect x="74" y="49" width="22" height="22" rx="3" fill="#16a34a"></rect>
+
+<!-- Text -->
+<text x="140" y="70" font-family="-apple-system, Segoe UI, Helvetica, Arial" font-weight="700" font-size="36" fill="#111111">
+GPU<tspan fill="#16a34a">XRAY</tspan>
+</text>
+
+</svg>
