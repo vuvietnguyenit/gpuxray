@@ -236,9 +236,10 @@ func (a *LeakAggregator) Snapshot() []MemoryLeakResult {
 
 func PrintHeader() {
 	fmt.Printf(
-		"%-10s %-8s %-4s %-12s %-8s %-8s %-16s\n",
+		"%-10s %-8s %-8s %-4s %-12s %-8s %-8s %-16s\n",
 		"TIME",
 		"PID",
+		"USER",
 		"GPU",
 		"INUSE_MB",
 		"AL_CNT",
@@ -249,9 +250,10 @@ func PrintHeader() {
 
 func PrintLeakStat(ts time.Time, r MemoryLeakResult) {
 	fmt.Printf(
-		"%-10s %-8d %-4d %-12s %-8d %-8d %-16s\n",
+		"%-10s %-8d %-8s %-4d %-12s %-8d %-8d %-16s\n",
 		ts.Format("15:04:05"),
 		r.Key.PID,
+		r.Process.Username,
 		r.Key.DeviceIndex,
 		internal.HumanBytes(r.Leaked),
 		r.AllocCount,

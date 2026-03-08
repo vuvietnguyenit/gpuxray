@@ -93,23 +93,14 @@ gpu_used_memory_bytes{gpu="GPU-47def375-4603-e5fa-82d3-c7cddc81e65a",gpu_index="
 
 This will report stat of GPU's memory usage. For example:
 ```sh
-# ./gpuxray memtrace -p 332361 -i 1
-TIME       PID      GPU  INUSE_MB     AL_CNT   FR_CNT   COMM            
-15:58:36   332361   0    512 B        38       37       python3         
-15:58:37   332361   0    1.00 KiB     80       78       python3         
-15:58:38   332361   0    1.00 KiB     118      116      python3         
-15:58:39   332361   0    512 B        156      155      python3         
-15:58:40   332361   0    1.00 KiB     197      195      python3         
-15:58:41   332361   0    1.00 KiB     237      235      python3         
-15:58:42   332361   0    512 B        275      274      python3         
-15:58:43   332361   0    2.00 KiB     315      311      python3         
-15:58:44   332361   0    2.00 KiB     358      354      python3         
-15:58:45   332361   0    1.00 KiB     400      398      python3         
-15:58:46   332361   0    512 B        439      438      python3         
-15:58:47   332361   0    1.00 KiB     482      480      python3         
-15:58:48   332361   0    512 B        524      523      python3         
-15:58:49   332361   0    1.00 KiB     566      564      python3         
-^C2026/03/04 15:58:50 Received signal, exiting..
+# ./gpuxray memtrace -p 2806854
+TIME       PID      USER     GPU  INUSE_MB     AL_CNT   FR_CNT   COMM            
+12:03:24   2806854  root     0    512 B        199      198      python3         
+12:03:29   2806854  root     0    512 B        402      401      python3         
+12:03:34   2806854  root     0    512 B        607      606      python3         
+12:03:39   2806854  root     0    1.00 KiB     802      800      python3         
+12:03:44   2806854  root     0    1.00 KiB     994      992      python3         
+12:03:49   2806854  root     0    2.00 KiB     1197     1193     python3    
 ```
 The meaning of each columns printed, please use `./gpuxray memtrace -h` flag to see more information
 
