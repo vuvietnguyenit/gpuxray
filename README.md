@@ -2,8 +2,7 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/vuvietnguyenit/gpuxray)
 ![Go Version](https://img.shields.io/github/go-mod/go-version/vuvietnguyenit/gpuxray)
-![License](https://img.shields.io/github/license/vuvietnguyenit/gpuxray)
-![Docker Pulls](https://img.shields.io/github/actions/workflow/status/vuvietnguyenit/gpuxray/release.yml)
+![License](https://img.shields.io/github/license/vuvietnguyenit/gpuxray?style=flat)
 
 <p align="center">
   <picture>
