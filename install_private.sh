@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
+
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Vu Nguyen
+
 set -e
 
 REPO="vuvietnguyenit/gpuxray"

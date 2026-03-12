@@ -17,7 +17,8 @@ An opensource observability tool for debugging GPU workloads on Linux servers.
 It traces CUDA activity using eBPF and provides:
 - per-process GPU metrics
 - GPU memory leak detection
-- Prometheus metrics for monitoring systems
+- Prometheus metrics for monitoring systems.
+
 This tool is inspired by [pidstat](https://man7.org/linux/man-pages/man1/pidstat.1.html) but designed for GPU monitoring.
 GPUXRAY is designed for AI/ML workloads running on GPU servers.
 
@@ -136,7 +137,6 @@ gpu_used_memory_bytes{gpu="GPU-47def375-4603-e5fa-82d3-c7cddc81e65a",gpu_index="
 
 ### Memory statistics
 
-
 This command reports statistics about GPU memory usage of process.
 
 ```sh
@@ -204,6 +204,6 @@ Follow [docker.md](./docs/docker.md)
 
 ## Debugging
 Follow [debugging.md](./docs/debugging.md)
-## Contributing
 
+## Contributing
 Contributions are welcome. Feel free to open issues or submit pull requests.
