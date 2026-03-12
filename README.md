@@ -21,8 +21,6 @@ It traces CUDA activity using eBPF and provides:
 This tool is inspired by [pidstat](https://man7.org/linux/man-pages/man1/pidstat.1.html) but designed for GPU monitoring.
 GPUXRAY is designed for AI/ML workloads running on GPU servers.
 
-Welcome to anyone who want to contribute to this project.
-
 ### Why use gpuxray?
 - `gpuxray` provides GPU observability at the process level, which is not fully supported by [DCGM exporter](https://github.com/NVIDIA/dcgm-exporter). It also leverages eBPF to perform deeper tracing of GPU workloads.
 - It leverages eBPF to trace CUDA activity from the kernel, enabling low-overhead and deep tracing of GPU workloads.
@@ -36,6 +34,27 @@ Welcome to anyone who want to contribute to this project.
 - Currently, this tool only inspects PIDs that use the CUDA Driver API. Processes that use the CUDA Runtime API may be omitted.
 - Requires Linux kernel version >= 5.6. Kernel versions in the 6.x series are recommended.
 - Currently supports only the `amd64` CPU architecture.
+
+## Table of Contents
+- [GPUXRAY](#gpuxray)
+    - [Why use gpuxray?](#why-use-gpuxray)
+  - [Usecases](#usecases)
+  - [Notice](#notice)
+  - [Table of Contents](#table-of-contents)
+  - [Architecture](#architecture)
+  - [Install](#install)
+    - [Binary](#binary)
+    - [Docker](#docker)
+    - [Build from source](#build-from-source)
+  - [Quickstart](#quickstart)
+    - [Run GPU exporter](#run-gpu-exporter)
+    - [Memory statistics](#memory-statistics)
+    - [Show memory-leaked stacktraces](#show-memory-leaked-stacktraces)
+    - [GPUXRAY for Kubernetes](#gpuxray-for-kubernetes)
+    - [GPUXRAY for Docker](#gpuxray-for-docker)
+  - [Debugging](#debugging)
+  - [Contributing](#contributing)
+
 
 ## Architecture
 
@@ -55,21 +74,9 @@ curl -s https://raw.githubusercontent.com/vuvietnguyenit/gpuxray/main/install.sh
 ```
 ### Docker
 
-`gpuxray` could be run as container that use to trace processes are running in the host. Simply pull the image and start the container.
-#### Run as Prometheus exporter
-
-```sh
-docker run --rm --gpus all --pid=host -p 2112:2112 ghcr.io/vuvietnguyenit/gpuxray:latest mon
+```bash
+docker pull ghcr.io/vuvietnguyenit/gpuxray:latest
 ```
-
-#### Run as tracing tool
-```sh
-docker run --privileged --rm --gpus all --pid=host \
-  -v /sys/kernel/debug:/sys/kernel/debug \
-  -v /sys/kernel/tracing:/sys/kernel/tracing \
-  ghcr.io/vuvietnguyenit/gpuxray:latest memtrace -p 1690251 -i 1
-```
-
 ### Build from source
 
 ```sh
@@ -86,6 +93,7 @@ Running the exporter exposes metrics related to processes using GPU resources on
 # gpuxray mon
 ```
 Metric definitions are available in: [metrics.txt](./metrics.txt)
+
 <details>
 <summary>Example result</summary>
 
@@ -128,7 +136,15 @@ gpu_used_memory_bytes{gpu="GPU-47def375-4603-e5fa-82d3-c7cddc81e65a",gpu_index="
 
 ### Memory statistics
 
-This command reports statistics about GPU memory usage.
+
+This command reports statistics about GPU memory usage of process.
+
+```sh
+./gpuxray memtrace -p 2806854
+```
+<details>
+<summary>Example result</summary>
+
 ```sh
 # ./gpuxray memtrace -p 2806854
 TIME       PID      USER     GPU  INUSE_MB     AL_CNT   FR_CNT   COMM            
@@ -139,11 +155,19 @@ TIME       PID      USER     GPU  INUSE_MB     AL_CNT   FR_CNT   COMM
 12:03:44   2806854  root     0    1.00 KiB     994      992      python3         
 12:03:49   2806854  root     0    2.00 KiB     1197     1193     python3    
 ```
+</details>
+
 To see the meaning of each column, run: `./gpuxray memtrace -h` flag to see more information
 
 ### Show memory-leaked stacktraces
 
 This command prints stack traces responsible for leaked GPU memory allocations.
+
+```sh
+./gpuxray memtrace -p 332361 -i 1 --print-stacks
+```
+<details>
+<summary>Example result</summary>
 
 ```sh
 # ./gpuxray memtrace -p 332361 -i 1 --print-stacks
@@ -170,31 +194,16 @@ This command prints stack traces responsible for leaked GPU memory allocations.
 
 ^C2026/03/04 15:59:46 Received signal, exiting..
 ```
+</details>
+
+### GPUXRAY for Kubernetes
+Follow [kubernetes.md](./docs/kubernetes.md)
+
+### GPUXRAY for Docker
+Follow [docker.md](./docs/docker.md)
+
 ## Debugging
+Follow [debugging.md](./docs/debugging.md)
+## Contributing
 
-Enable debug mode to help diagnose issues. `--log-level debug` flag.
-It could help print the metrics of GPU process to the console. Like this:
-
-```sh
-# ./gpuxray mon --log-level debug
-11:32:31 DBG prometheus scrape started method=GET path=/metrics remote=[::1]:43402
-11:32:31 DBG metrics for GPU 0: total=34190917632 used=24287182848 free=9903734784
-11:32:31 DBG process 401948 (python) on GPU 0: used_memory=23716691968 sm_util=93%
-11:32:31 DBG process 2912 (Xorg) on GPU 0: used_memory=10575872 sm_util=0%
-11:32:31 DBG process 3112 (gnome-shell) on GPU 0: used_memory=11296768 sm_util=0%
-11:32:31 DBG prometheus scrape finished duration=2.600426
-11:32:32 DBG prometheus scrape started method=GET path=/metrics remote=[::1]:43418
-11:32:32 DBG metrics for GPU 0: total=34190917632 used=24287182848 free=9903734784
-11:32:32 DBG process 401948 (python) on GPU 0: used_memory=23716691968 sm_util=93%
-11:32:32 DBG process 2912 (Xorg) on GPU 0: used_memory=10575872 sm_util=0%
-11:32:32 DBG process 3112 (gnome-shell) on GPU 0: used_memory=11296768 sm_util=0%
-11:32:32 DBG prometheus scrape finished duration=3.039056
-```
-
-This mode helps observe:
-- GPU metrics collection
-- active GPU processes
-- Prometheus scrape activity (client IP, duration, etc.)
-- internal tracing events
-
-It can also display detailed actions when running the `memtrace` feature.
+Contributions are welcome. Feel free to open issues or submit pull requests.
